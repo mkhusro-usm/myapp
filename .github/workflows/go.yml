@@ -1,14 +1,29 @@
-name: Go Hello World
+name: Governance Check
 
 on:
+  schedule:
+    - cron: "0 8 * * *" # Daily at 8am UTC
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths:
+      - config.yaml
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: "evaluate"
+        type: choice
+        options:
+          - evaluate
+          - apply
+      repo:
+        description: "Target a single repo (blank = all)"
+        required: false
+        type: string
 
 jobs:
-  run:
+  governance:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +34,17 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -o hello-world .
+        run: go build -o governance .
 
-      - name: Run
-        run: ./hello-world
+      - name: Run governance check
+        run: |
+          ARGS="-config config.yaml"
+          if [ -n "${{ github.event.inputs.mode }}" ]; then
+            ARGS="$ARGS -mode ${{ github.event.inputs.mode }}"
+          fi
+          if [ -n "${{ github.event.inputs.repo }}" ]; then
+            ARGS="$ARGS -repo ${{ github.event.inputs.repo }}"
+          fi
+          ./governance $ARGS
+        env:
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
