@@ -38,7 +38,7 @@ jobs:
 
       - name: Run governance check
         run: |
-          ARGS="-config config.yaml"
+          ARGS="-config config.yaml -output reports/compliance.json"
           if [ -n "${{ github.event.inputs.mode }}" ]; then
             ARGS="$ARGS -mode ${{ github.event.inputs.mode }}"
           fi
@@ -47,4 +47,12 @@ jobs:
           fi
           ./governance $ARGS
         env:
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Upload compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-report
+          path: reports/compliance.json
+          retention-days: 90

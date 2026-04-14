@@ -1,30 +1,58 @@
-github_app:
-  app_id: 12345
-  installation_id: 67890
+github-app:
+  app-id: 3378260
+  installation-id: 123964365
   # Private key is injected via GITHUB_APP_PRIVATE_KEY env var (from GitHub Actions secrets).
-  # Optionally set private_key_path for local dev with a gitignored .pem file.
-  # private_key_path: ./private-key.pem
+  # Optionally set private-key-path for local dev with a gitignored .pem file.
+  private-key-path: ./private-key.pem
 
-org: my-org
-
-# "evaluate" = audit only (report drift), "apply" = enforce (fix drift)
-mode: evaluate
+org: mkhusro-usm
 
 concurrency: 10
 
-output:
-  console: true
-  json: reports/compliance.json
-
 rules:
-  branch_protection:
+  branch-protection:
     enabled: true
     settings:
-      require_pull_request_reviews: true
-      required_approving_review_count: 1
-      require_status_checks: true
-      require_up_to_date_branch: true
-      enforce_admins: true
-      require_linear_history: false
-      allow_force_pushes: false
-      allow_deletions: false
+      # Pull request reviews
+      require-pull-request-reviews: true
+      required-approving-review-count: 1
+      dismiss-stale-reviews: true
+      require-code-owner-reviews: true
+      require-last-push-approval: true
+      # Actor-based settings require an organization repository
+      # bypass-pull-request-actors:
+      #   users:
+      #     - mkhusro-usm
+      #   teams: []
+      # review-dismissal-actors:
+      #   users:
+      #     - mkhusro-usm
+      #   teams: []
+
+      # Status checks
+      require-status-checks: true
+      require-up-to-date-branch: true
+      required-status-check-contexts:
+        - ci/build
+        - ci/test
+
+      # Deployments
+      require-deployments: true
+      required-deployment-environments: []
+
+      # Admin and merge rules
+      enforce-admins: true
+      require-linear-history: true
+      require-signed-commits: true
+      require-conversation-resolution: true
+
+      # Branch restrictions
+      allow-force-pushes: true
+      allow-deletions: true
+      block-creations: true
+      lock-branch: true
+      allow-fork-syncing: true
+      # push-restriction-actors:
+      #   users:
+      #     - mkhusro-usm
+      #   teams: []
