@@ -40,7 +40,7 @@ jobs:
         run: |
           ARGS="-config config.yaml -output reports/compliance.json"
           MODE="${{ github.event.inputs.mode }}"
-          ARGS="$ARGS -mode ${MODE:-apply}"
+          ARGS="$ARGS -mode ${MODE:-evaluate}"
           if [ -n "${{ github.event.inputs.repo }}" ]; then
             ARGS="$ARGS -repo ${{ github.event.inputs.repo }}"
           fi
