@@ -8,6 +8,7 @@
 *.so
 *.dylib
 governance
+myapp
 test-build
 
 # Test binary, built with `go test -c`

@@ -33,12 +33,13 @@ type Rule interface {
 
 // ParseSettings converts a generic settings map into a typed struct via YAML round-trip.
 // Each rule defines its own settings struct with yaml tags.
-func ParseSettings[T any](raw map[string]interface{}) (T, error) {
+func ParseSettings[T any](raw map[string]any) (T, error) {
 	var settings T
 	bytes, err := yaml.Marshal(raw)
 	if err != nil {
 		return settings, err
 	}
+	
 	err = yaml.Unmarshal(bytes, &settings)
 	return settings, err
 }
