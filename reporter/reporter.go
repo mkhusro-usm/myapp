@@ -33,12 +33,12 @@ func BuildReport(org string, mode rule.Mode, results []*rule.Result) *Report {
 	var s Summary
 	s.Total = len(results)
 	for _, r := range results {
-		switch {
-		case r.Compliant:
-			s.Compliant++
-		case r.Applied:
+		if r.Applied {
 			s.Applied++
-		default:
+		}
+		if r.Compliant {
+			s.Compliant++
+		} else {
 			s.NonCompliant++
 		}
 	}
