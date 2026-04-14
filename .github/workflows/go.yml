@@ -39,9 +39,8 @@ jobs:
       - name: Run governance check
         run: |
           ARGS="-config config.yaml -output reports/compliance.json"
-          if [ -n "${{ github.event.inputs.mode }}" ]; then
-            ARGS="$ARGS -mode ${{ github.event.inputs.mode }}"
-          fi
+          MODE="${{ github.event.inputs.mode }}"
+          ARGS="$ARGS -mode ${MODE:-apply}"
           if [ -n "${{ github.event.inputs.repo }}" ]; then
             ARGS="$ARGS -repo ${{ github.event.inputs.repo }}"
           fi
