@@ -3,6 +3,7 @@ package rule
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -114,8 +115,10 @@ func (bp *BranchProtection) Apply(ctx context.Context, repo *gh.Repository) (*Re
 	}
 
 	if protection == nil {
+		log.Printf("[%s] creating branch protection rule for %s", repo.FullName(), branch)
 		_, err = bp.client.CreateBranchProtectionRule(ctx, repo.ID, branch, input)
 	} else {
+		log.Printf("[%s] updating branch protection rule for %s", repo.FullName(), branch)
 		err = bp.client.UpdateBranchProtectionRule(ctx, protection.ID, input)
 	}
 	if err != nil {

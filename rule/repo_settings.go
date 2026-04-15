@@ -3,6 +3,7 @@ package rule
 import (
 	"context"
 	"fmt"
+	"log"
 
 	gh "github.com/mkhusro-usm/myapp/internal/github"
 )
@@ -46,6 +47,7 @@ func (rs *RepoSettings) Evaluate(ctx context.Context, repo *gh.Repository) (*Res
 func (rs *RepoSettings) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
 	desired := rs.desiredSettings()
 
+	log.Printf("[%s] applying repository PR/merge settings", repo.FullName())
 	if err := rs.client.UpdateRepoSettings(ctx, repo.Name, desired); err != nil {
 		return nil, fmt.Errorf("applying repo settings for %s: %w", repo.FullName(), err)
 	}

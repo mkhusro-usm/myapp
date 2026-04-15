@@ -111,6 +111,8 @@ func newApp(cfg *config.Config, opts ...Option) (*App, error) {
 	httpClient := &http.Client{Transport: transport}
 	client := gh.NewClient(httpClient, cfg.Org)
 
+	log.Printf("authenticated as GitHub App (app-id: %d, installation-id: %d)", cfg.GitHubApp.AppID, cfg.GitHubApp.InstallationID)
+
 	app := &App{
 		config:    cfg,
 		client:    client,
@@ -133,8 +135,10 @@ func newApp(cfg *config.Config, opts ...Option) (*App, error) {
 func (a *App) registerRules() error {
 	for name, rc := range a.config.Rules {
 		if !rc.Enabled {
+			log.Printf("rule %q is disabled, skipping", name)
 			continue
 		}
+		log.Printf("registering rule: %s", name)
 		switch name {
 		case "branch-protection":
 			settings, err := rule.ParseSettings[rule.BranchProtectionSettings](rc.Settings)
@@ -163,12 +167,13 @@ func (a *App) registerRules() error {
 
 // run fetches repos and evaluates/applies enabled rules in parallel.
 func (a *App) run(ctx context.Context) error {
+	log.Printf("fetching repositories for org %s", a.client.Org())
 	repos, err := a.fetchRepos(ctx)
 	if err != nil {
 		return fmt.Errorf("fetching repos: %w", err)
 	}
 
-	log.Printf("targeting %d repository(ies) in %s (mode: %s)", len(repos), a.client.Org(), a.mode)
+	log.Printf("found %d repository(ies) to process (mode: %s)", len(repos), a.mode)
 	rules := a.registry.All()
 	if len(rules) == 0 {
 		log.Println("no rules enabled, nothing to do")
@@ -201,6 +206,16 @@ func (a *App) run(ctx context.Context) error {
 	wg.Wait()
 
 	report := reporter.BuildReport(a.config.Org, a.mode, results)
+
+	log.Printf("run complete: %d total, %d compliant, %d non-compliant, %d applied",
+		report.Summary.Total, report.Summary.Compliant, report.Summary.NonCompliant, report.Summary.Applied)
+	if len(report.Summary.PullRequests) > 0 {
+		log.Printf("pull requests created: %d", len(report.Summary.PullRequests))
+	}
+
+	if a.outputPath != "" {
+		log.Printf("writing report to %s", a.outputPath)
+	}
 	if err := report.Write(a.outputPath); err != nil {
 		log.Printf("error writing report: %v", err)
 	}
@@ -209,8 +224,10 @@ func (a *App) run(ctx context.Context) error {
 }
 
 func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[string]rule.Rule) []*rule.Result {
+	log.Printf("[%s] processing repository (%d rules)", repo.FullName(), len(rules))
 	var results []*rule.Result
 	for _, r := range rules {
+		log.Printf("[%s] running %s (%s)", repo.FullName(), r.Name(), a.mode)
 		var result *rule.Result
 		var err error
 
@@ -221,24 +238,36 @@ func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[st
 		}
 
 		if err != nil {
-			log.Printf("error processing %s on %s: %v", r.Name(), repo.FullName(), err)
+			log.Printf("[%s] error in %s: %v", repo.FullName(), r.Name(), err)
 			continue
 		}
+
+		if result.Compliant {
+			log.Printf("[%s] %s: compliant", repo.FullName(), r.Name())
+		} else {
+			log.Printf("[%s] %s: non-compliant (%d violations)", repo.FullName(), r.Name(), result.ViolationCount)
+		}
+		if result.Applied {
+			log.Printf("[%s] %s: applied successfully", repo.FullName(), r.Name())
+		}
+
 		results = append(results, result)
 	}
-	
+
 	return results
 }
 
 func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
 	if a.targetRepo != "" {
+		log.Printf("targeting single repository: %s", a.targetRepo)
 		repo, err := a.client.GetRepository(ctx, a.targetRepo)
 		if err != nil {
 			return nil, err
 		}
 		return []gh.Repository{*repo}, nil
 	}
-	
+
+	log.Printf("listing all repositories accessible to the GitHub App")
 	return a.client.ListRepositories(ctx)
 }
 
