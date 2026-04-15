@@ -1,28 +1,35 @@
 package rule
 
-// Registry holds all enabled governance rules, keyed by name.
+// Registry holds all enabled governance rules, separated by scope.
 type Registry struct {
-	rules map[string]Rule
+	repoRules map[string]RepoRule
+	orgRules  map[string]OrgRule
 }
 
 // NewRegistry creates an empty rule registry.
 func NewRegistry() *Registry {
-	return &Registry{rules: make(map[string]Rule)}
+	return &Registry{
+		repoRules: make(map[string]RepoRule),
+		orgRules:  make(map[string]OrgRule),
+	}
 }
 
-// Register adds a rule to the registry.
-func (r *Registry) Register(rule Rule) {
-	r.rules[rule.Name()] = rule
+// RegisterRepoRule adds a repository-scoped rule.
+func (r *Registry) RegisterRepoRule(rule RepoRule) {
+	r.repoRules[rule.Name()] = rule
 }
 
-// Get retrieves a rule by name. Returns false if not found.
-func (r *Registry) Get(name string) (Rule, bool) {
-	rule, ok := r.rules[name]
-	
-	return rule, ok
+// RegisterOrgRule adds an organization-scoped rule.
+func (r *Registry) RegisterOrgRule(rule OrgRule) {
+	r.orgRules[rule.Name()] = rule
 }
 
-// All returns every registered rule.
-func (r *Registry) All() map[string]Rule {
-	return r.rules
+// RepoRules returns all registered repository-scoped rules.
+func (r *Registry) RepoRules() map[string]RepoRule {
+	return r.repoRules
+}
+
+// OrgRules returns all registered organization-scoped rules.
+func (r *Registry) OrgRules() map[string]OrgRule {
+	return r.orgRules
 }

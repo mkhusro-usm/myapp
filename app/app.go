@@ -143,26 +143,29 @@ func (a *App) registerRules() error {
 			log.Printf("rule %q is disabled, skipping", name)
 			continue
 		}
-		log.Printf("registering rule: %s", name)
+		if rc.Scope == "" {
+			return fmt.Errorf("rule %q is missing required 'scope' field (repo or org)", name)
+		}
+		log.Printf("registering rule: %s (scope: %s)", name, rc.Scope)
 		switch name {
 		case "branch-protection":
 			settings, err := rule.ParseSettings[rule.BranchProtectionSettings](rc.Settings)
 			if err != nil {
 				return fmt.Errorf("parsing branch-protection settings: %w", err)
 			}
-			a.registry.Register(rule.NewBranchProtection(a.client, settings))
+			a.registry.RegisterRepoRule(rule.NewBranchProtection(a.client, settings))
 		case "codeowners":
 			settings, err := rule.ParseSettings[rule.CodeownersSettings](rc.Settings)
 			if err != nil {
 				return fmt.Errorf("parsing codeowners settings: %w", err)
 			}
-			a.registry.Register(rule.NewCodeowners(a.client, settings))
+			a.registry.RegisterRepoRule(rule.NewCodeowners(a.client, settings))
 		case "repo-settings":
 			settings, err := rule.ParseSettings[rule.RepoSettingsConfig](rc.Settings)
 			if err != nil {
 				return fmt.Errorf("parsing repo-settings settings: %w", err)
 			}
-			a.registry.Register(rule.NewRepoSettings(a.client, settings))
+			a.registry.RegisterRepoRule(rule.NewRepoSettings(a.client, settings))
 		default:
 			log.Printf("warning: unknown rule %q, skipping", name)
 		}
@@ -171,45 +174,58 @@ func (a *App) registerRules() error {
 	return nil
 }
 
-// run fetches repos and evaluates/applies enabled rules in parallel.
+// run executes governance rules in two phases: org-scoped rules first, then repo-scoped rules.
 func (a *App) run(ctx context.Context) error {
-	log.Printf("fetching repositories for org %s", a.client.Org())
-	repos, err := a.fetchRepos(ctx)
-	if err != nil {
-		return fmt.Errorf("fetching repos: %w", err)
-	}
+	repoRules := a.registry.RepoRules()
+	orgRules := a.registry.OrgRules()
 
-	log.Printf("found %d repository(ies) to process (mode: %s)", len(repos), a.mode)
-	rules := a.registry.All()
-	if len(rules) == 0 {
+	if len(repoRules) == 0 && len(orgRules) == 0 {
 		log.Println("no rules enabled, nothing to do")
 		return nil
 	}
 
-	var (
-		mu      sync.Mutex
-		results []*rule.Result
-		wg      sync.WaitGroup
-		sem     = make(chan struct{}, a.config.Concurrency)
-	)
+	var results []*rule.Result
 
-	for i := range repos {
-		if repos[i].IsArchived {
-			continue
-		}
-		wg.Add(1)
-		go func(repo *gh.Repository) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			repoResults := a.processRepo(ctx, repo, rules)
-			mu.Lock()
-			results = append(results, repoResults...)
-			mu.Unlock()
-		}(&repos[i])
+	// Phase 1: org-scoped rules (run once, not per-repo).
+	if len(orgRules) > 0 {
+		log.Printf("running %d org-scoped rule(s) (mode: %s)", len(orgRules), a.mode)
+		results = append(results, a.processOrgRules(ctx, orgRules)...)
 	}
-	wg.Wait()
+
+	// Phase 2: repo-scoped rules (run per-repo, concurrently).
+	if len(repoRules) > 0 {
+		log.Printf("fetching repositories for org %s", a.client.Org())
+		repos, err := a.fetchRepos(ctx)
+		if err != nil {
+			return fmt.Errorf("fetching repos: %w", err)
+		}
+
+		log.Printf("found %d repository(ies) to process with %d repo-scoped rule(s) (mode: %s)", len(repos), len(repoRules), a.mode)
+
+		var (
+			mu  sync.Mutex
+			wg  sync.WaitGroup
+			sem = make(chan struct{}, a.config.Concurrency)
+		)
+
+		for i := range repos {
+			if repos[i].IsArchived {
+				continue
+			}
+			wg.Add(1)
+			go func(repo *gh.Repository) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				repoResults := a.processRepo(ctx, repo, repoRules)
+				mu.Lock()
+				results = append(results, repoResults...)
+				mu.Unlock()
+			}(&repos[i])
+		}
+		wg.Wait()
+	}
 
 	report := reporter.BuildReport(a.config.Org, a.mode, results)
 
@@ -230,7 +246,31 @@ func (a *App) run(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[string]rule.Rule) []*rule.Result {
+func (a *App) processOrgRules(ctx context.Context, rules map[string]rule.OrgRule) []*rule.Result {
+	var results []*rule.Result
+	for _, r := range rules {
+		log.Printf("[org] running %s (%s)", r.Name(), a.mode)
+		var result *rule.Result
+		var err error
+
+		if a.mode == rule.ModeApply {
+			result, err = r.Apply(ctx)
+		} else {
+			result, err = r.Evaluate(ctx)
+		}
+
+		if err != nil {
+			log.Printf("[org] error in %s: %v", r.Name(), err)
+			continue
+		}
+
+		a.logResult("org", r.Name(), result)
+		results = append(results, result)
+	}
+	return results
+}
+
+func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[string]rule.RepoRule) []*rule.Result {
 	log.Printf("[%s] processing repository (%d rules)", repo.FullName(), len(rules))
 	var results []*rule.Result
 	for _, r := range rules {
@@ -249,19 +289,21 @@ func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[st
 			continue
 		}
 
-		if result.Compliant {
-			log.Printf("[%s] %s: compliant", repo.FullName(), r.Name())
-		} else {
-			log.Printf("[%s] %s: non-compliant (%d violations)", repo.FullName(), r.Name(), result.ViolationCount)
-		}
-		if result.Applied {
-			log.Printf("[%s] %s: applied successfully", repo.FullName(), r.Name())
-		}
-
+		a.logResult(repo.FullName(), r.Name(), result)
 		results = append(results, result)
 	}
-
 	return results
+}
+
+func (a *App) logResult(scope, ruleName string, result *rule.Result) {
+	if result.Compliant {
+		log.Printf("[%s] %s: compliant", scope, ruleName)
+	} else {
+		log.Printf("[%s] %s: non-compliant (%d violations)", scope, ruleName, result.ViolationCount)
+	}
+	if result.Applied {
+		log.Printf("[%s] %s: applied successfully", scope, ruleName)
+	}
 }
 
 func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {

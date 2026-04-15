@@ -39,11 +39,18 @@ type Violation struct {
 	Message  string `json:"message"`
 }
 
-// Rule is the interface that all governance rules must implement.
-type Rule interface {
+// RepoRule is a governance rule that operates on a single repository.
+type RepoRule interface {
 	Name() string
 	Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error)
 	Apply(ctx context.Context, repo *gh.Repository) (*Result, error)
+}
+
+// OrgRule is a governance rule that operates at the organization level.
+type OrgRule interface {
+	Name() string
+	Evaluate(ctx context.Context) (*Result, error)
+	Apply(ctx context.Context) (*Result, error)
 }
 
 // ParseSettings converts a generic settings map into a typed struct via YAML round-trip.

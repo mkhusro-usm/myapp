@@ -12,6 +12,7 @@ concurrency: 10
 rules:
   branch-protection:
     enabled: true
+    scope: repo
     settings:
       # Pull request reviews
       require-pull-request-reviews: true
@@ -59,6 +60,7 @@ rules:
 
   codeowners:
     enabled: true
+    scope: repo
     settings:
       entries:
         - pattern: "*"
@@ -67,6 +69,7 @@ rules:
 
   repo-settings:
     enabled: true
+    scope: repo
     settings:
       # Merge strategies
       allow-merge-commit: true

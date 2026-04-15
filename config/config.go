@@ -22,9 +22,10 @@ type GitHubAppConfig struct {
 	PrivateKeyPath string `yaml:"private-key-path"`
 }
 
-// RuleConfig represents a single rule's toggle and settings from the config file.
+// RuleConfig represents a single rule's toggle, scope, and settings from the config file.
 type RuleConfig struct {
 	Enabled  bool           `yaml:"enabled"`
+	Scope    string         `yaml:"scope"` // "repo" or "org"
 	Settings map[string]any `yaml:"settings"`
 }
 
