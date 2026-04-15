@@ -3,7 +3,7 @@ github-app:
   installation-id: 123964365
   # Private key is injected via GITHUB_APP_PRIVATE_KEY env var (from GitHub Actions secrets).
   # Optionally set private-key-path for local dev with a gitignored .pem file.
-  private-key-path: ./private-key.pem
+  # private-key-path: ./private-key.pem
 
 org: mkhusro-usm
 
