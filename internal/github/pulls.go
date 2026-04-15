@@ -17,7 +17,7 @@ func (c *Client) GetBranchSHA(ctx context.Context, repoName, branch string) (str
 	if err != nil {
 		return "", fmt.Errorf("getting ref for branch %s: %w", branch, err)
 	}
-	
+
 	return ref.GetObject().GetSHA(), nil
 }
 
@@ -31,7 +31,7 @@ func (c *Client) CreateBranch(ctx context.Context, repoName, branchName, baseSHA
 	if err != nil {
 		return fmt.Errorf("creating branch %s: %w", branchName, err)
 	}
-	
+
 	return nil
 }
 
@@ -46,11 +46,11 @@ func (c *Client) GetFileSHA(ctx context.Context, repoName, branch, path string) 
 		}
 		return "", fmt.Errorf("getting file SHA for %s: %w", path, err)
 	}
-	
+
 	if file == nil {
 		return "", nil
 	}
-	
+
 	return file.GetSHA(), nil
 }
 
@@ -65,12 +65,12 @@ func (c *Client) CommitFile(ctx context.Context, repoName, branch, path, message
 	if blobSHA != "" {
 		opts.SHA = &blobSHA
 	}
-	
+
 	_, _, err := c.REST.Repositories.CreateFile(ctx, c.org, repoName, path, opts)
 	if err != nil {
 		return fmt.Errorf("committing file %s: %w", path, err)
 	}
-	
+
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (c *Client) CreatePullRequest(ctx context.Context, repoName, title, body, h
 	if err != nil {
 		return "", fmt.Errorf("creating pull request: %w", err)
 	}
-	
+
 	return pr.GetHTMLURL(), nil
 }
 

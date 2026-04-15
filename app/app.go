@@ -170,7 +170,7 @@ func (a *App) registerRules() error {
 			log.Printf("warning: unknown rule %q, skipping", name)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -184,12 +184,13 @@ func (a *App) run(ctx context.Context) error {
 		return nil
 	}
 
-	var results []*rule.Result
+	var orgResults []*rule.Result
+	var repoResults []*rule.Result
 
 	// Phase 1: org-scoped rules (run once, not per-repo).
 	if len(orgRules) > 0 {
 		log.Printf("running %d org-scoped rule(s) (mode: %s)", len(orgRules), a.mode)
-		results = append(results, a.processOrgRules(ctx, orgRules)...)
+		orgResults = a.processOrgRules(ctx, orgRules)
 	}
 
 	// Phase 2: repo-scoped rules (run per-repo, concurrently).
@@ -218,16 +219,16 @@ func (a *App) run(ctx context.Context) error {
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				repoResults := a.processRepo(ctx, repo, repoRules)
+				results := a.processRepo(ctx, repo, repoRules)
 				mu.Lock()
-				results = append(results, repoResults...)
+				repoResults = append(repoResults, results...)
 				mu.Unlock()
 			}(&repos[i])
 		}
 		wg.Wait()
 	}
 
-	report := reporter.BuildReport(a.config.Org, a.mode, results)
+	report := reporter.BuildReport(a.config.Org, a.mode, orgResults, repoResults)
 
 	log.Printf("run complete: %d repositories, %d evaluations, %d compliant, %d non-compliant, %d applied",
 		report.Summary.Repositories, report.Summary.TotalEvaluations, report.Summary.CompliantResults, report.Summary.NonCompliantResults, report.Summary.AppliedResults)
@@ -238,7 +239,7 @@ func (a *App) run(ctx context.Context) error {
 	if a.outputPath != "" {
 		log.Printf("writing report to %s", a.outputPath)
 	}
-	
+
 	if err := report.Write(a.outputPath); err != nil {
 		log.Printf("error writing report: %v", err)
 	}
@@ -316,7 +317,7 @@ func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
 		return []gh.Repository{*repo}, nil
 	}
 	log.Printf("listing all repositories accessible to the GitHub App")
-	
+
 	return a.client.ListRepositories(ctx)
 }
 

@@ -60,7 +60,7 @@ func (rs *RepoSettings) Apply(ctx context.Context, repo *gh.Repository) (*Result
 
 	r := NewResult(rs.Name(), repo.FullName(), nil)
 	r.Applied = true
-	
+
 	return r, nil
 }
 

@@ -29,6 +29,6 @@ func (c *Client) GetFileContent(ctx context.Context, repoName, expression string
 	if err := c.GraphQL.Query(ctx, &q, variables); err != nil {
 		return "", fmt.Errorf("querying file content for %s/%s: %w", repoName, expression, err)
 	}
-	
+
 	return q.Repository.Object.Blob.Text, nil
 }

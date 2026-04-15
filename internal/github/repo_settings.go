@@ -27,7 +27,7 @@ func (c *Client) GetRepoSettings(ctx context.Context, repoName string) (*RepoSet
 	if err != nil {
 		return nil, fmt.Errorf("getting repository %s: %w", repoName, err)
 	}
-	
+
 	return &RepoSettings{
 		AllowMergeCommit:         repo.GetAllowMergeCommit(),
 		AllowSquashMerge:         repo.GetAllowSquashMerge(),
@@ -75,6 +75,6 @@ func (c *Client) UpdateRepoSettings(ctx context.Context, repoName string, s *Rep
 	if err != nil {
 		return fmt.Errorf("updating repository settings for %s: %w", repoName, err)
 	}
-	
+
 	return nil
 }

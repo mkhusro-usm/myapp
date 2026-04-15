@@ -21,7 +21,7 @@ type Result struct {
 // NewResult constructs a Result, automatically setting ViolationCount and Compliant.
 func NewResult(ruleName, repository string, violations []Violation) *Result {
 	violationCount := len(violations)
-	
+
 	return &Result{
 		RuleName:       ruleName,
 		Repository:     repository,
@@ -63,6 +63,6 @@ func ParseSettings[T any](raw map[string]any) (T, error) {
 	}
 
 	err = yaml.Unmarshal(bytes, &settings)
-	
+
 	return settings, err
 }

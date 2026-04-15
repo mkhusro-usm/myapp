@@ -33,13 +33,13 @@ func toGitHubStrings(ss []string) []githubv4.String {
 	for i, s := range ss {
 		out[i] = githubv4.String(s)
 	}
-	
+
 	return out
 }
 
 func toGitHubStringsPtr(ss []string) *[]githubv4.String {
 	out := toGitHubStrings(ss)
-	
+
 	return &out
 }
 
@@ -48,6 +48,37 @@ func toGitHubIDsPtr(ids []string) *[]githubv4.ID {
 	for i, id := range ids {
 		out[i] = githubv4.ID(id)
 	}
-	
+
 	return &out
+}
+
+// Nil-safe conversion helpers for optional GraphQL input fields.
+// When the input pointer is nil, the output is nil and the field is omitted from the mutation.
+
+func gqlBool(b *bool) *githubv4.Boolean {
+	if b == nil {
+		return nil
+	}
+	return githubv4.NewBoolean(githubv4.Boolean(*b))
+}
+
+func gqlInt(i *int) *githubv4.Int {
+	if i == nil {
+		return nil
+	}
+	return githubv4.NewInt(githubv4.Int(*i))
+}
+
+func gqlStringsPtr(ss []string) *[]githubv4.String {
+	if ss == nil {
+		return nil
+	}
+	return toGitHubStringsPtr(ss)
+}
+
+func gqlIDsPtr(ids []string) *[]githubv4.ID {
+	if ids == nil {
+		return nil
+	}
+	return toGitHubIDsPtr(ids)
 }

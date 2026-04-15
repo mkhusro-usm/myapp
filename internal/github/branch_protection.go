@@ -39,28 +39,29 @@ type BranchProtectionRule struct {
 }
 
 // BranchProtectionInput represents the desired state to apply for a branch protection rule.
+// Pointer fields are optional — only non-nil fields are included in the GraphQL mutation.
 type BranchProtectionInput struct {
-	RequiresApprovingReviews       bool
-	RequiredApprovingReviewCount   int
-	DismissesStaleReviews          bool
-	RequiresCodeOwnerReviews       bool
-	RequireLastPushApproval        bool
-	RequiresStatusChecks           bool
-	RequiresStrictStatusChecks     bool
+	RequiresApprovingReviews       *bool
+	RequiredApprovingReviewCount   *int
+	DismissesStaleReviews          *bool
+	RequiresCodeOwnerReviews       *bool
+	RequireLastPushApproval        *bool
+	RequiresStatusChecks           *bool
+	RequiresStrictStatusChecks     *bool
 	RequiredStatusCheckContexts    []string
-	RequiresDeployments            bool
+	RequiresDeployments            *bool
 	RequiredDeploymentEnvironments []string
-	IsAdminEnforced                bool
-	RequiresLinearHistory          bool
-	RequiresCommitSignatures       bool
-	RequiresConversationResolution bool
-	AllowsForcePushes              bool
-	AllowsDeletions                bool
-	BlocksCreations                bool
-	LockBranch                     bool
-	LockAllowsFetchAndMerge        bool
-	RestrictsPushes                bool
-	RestrictsReviewDismissals      bool
+	IsAdminEnforced                *bool
+	RequiresLinearHistory          *bool
+	RequiresCommitSignatures       *bool
+	RequiresConversationResolution *bool
+	AllowsForcePushes              *bool
+	AllowsDeletions                *bool
+	BlocksCreations                *bool
+	LockBranch                     *bool
+	LockAllowsFetchAndMerge        *bool
+	RestrictsPushes                *bool
+	RestrictsReviewDismissals      *bool
 	BypassPullRequestActorIDs      []string
 	PushActorIDs                   []string
 	ReviewDismissalActorIDs        []string
@@ -163,7 +164,7 @@ func (c *Client) GetBranchProtectionRule(ctx context.Context, repoName, branch s
 		}
 		variables["cursor"] = githubv4.NewString(q.Repository.BranchProtectionRules.PageInfo.EndCursor)
 	}
-	
+
 	return nil, nil
 }
 
@@ -177,40 +178,39 @@ func (c *Client) CreateBranchProtectionRule(ctx context.Context, repoID, pattern
 		} `graphql:"createBranchProtectionRule(input: $input)"`
 	}
 
-	contexts := toGitHubStrings(input.RequiredStatusCheckContexts)
 	gqlInput := githubv4.CreateBranchProtectionRuleInput{
 		RepositoryID:                   repoID,
 		Pattern:                        githubv4.String(pattern),
-		RequiresApprovingReviews:       githubv4.NewBoolean(githubv4.Boolean(input.RequiresApprovingReviews)),
-		RequiredApprovingReviewCount:   githubv4.NewInt(githubv4.Int(input.RequiredApprovingReviewCount)),
-		DismissesStaleReviews:          githubv4.NewBoolean(githubv4.Boolean(input.DismissesStaleReviews)),
-		RequiresCodeOwnerReviews:       githubv4.NewBoolean(githubv4.Boolean(input.RequiresCodeOwnerReviews)),
-		RequireLastPushApproval:        githubv4.NewBoolean(githubv4.Boolean(input.RequireLastPushApproval)),
-		RequiresStatusChecks:           githubv4.NewBoolean(githubv4.Boolean(input.RequiresStatusChecks)),
-		RequiresStrictStatusChecks:     githubv4.NewBoolean(githubv4.Boolean(input.RequiresStrictStatusChecks)),
-		RequiredStatusCheckContexts:    &contexts,
-		RequiresDeployments:            githubv4.NewBoolean(githubv4.Boolean(input.RequiresDeployments)),
-		RequiredDeploymentEnvironments: toGitHubStringsPtr(input.RequiredDeploymentEnvironments),
-		IsAdminEnforced:                githubv4.NewBoolean(githubv4.Boolean(input.IsAdminEnforced)),
-		RequiresLinearHistory:          githubv4.NewBoolean(githubv4.Boolean(input.RequiresLinearHistory)),
-		RequiresCommitSignatures:       githubv4.NewBoolean(githubv4.Boolean(input.RequiresCommitSignatures)),
-		RequiresConversationResolution: githubv4.NewBoolean(githubv4.Boolean(input.RequiresConversationResolution)),
-		AllowsForcePushes:              githubv4.NewBoolean(githubv4.Boolean(input.AllowsForcePushes)),
-		AllowsDeletions:                githubv4.NewBoolean(githubv4.Boolean(input.AllowsDeletions)),
-		BlocksCreations:                githubv4.NewBoolean(githubv4.Boolean(input.BlocksCreations)),
-		LockBranch:                     githubv4.NewBoolean(githubv4.Boolean(input.LockBranch)),
-		LockAllowsFetchAndMerge:        githubv4.NewBoolean(githubv4.Boolean(input.LockAllowsFetchAndMerge)),
-		RestrictsPushes:                githubv4.NewBoolean(githubv4.Boolean(input.RestrictsPushes)),
-		RestrictsReviewDismissals:      githubv4.NewBoolean(githubv4.Boolean(input.RestrictsReviewDismissals)),
-		BypassPullRequestActorIDs:      toGitHubIDsPtr(input.BypassPullRequestActorIDs),
-		PushActorIDs:                   toGitHubIDsPtr(input.PushActorIDs),
-		ReviewDismissalActorIDs:        toGitHubIDsPtr(input.ReviewDismissalActorIDs),
+		RequiresApprovingReviews:       gqlBool(input.RequiresApprovingReviews),
+		RequiredApprovingReviewCount:   gqlInt(input.RequiredApprovingReviewCount),
+		DismissesStaleReviews:          gqlBool(input.DismissesStaleReviews),
+		RequiresCodeOwnerReviews:       gqlBool(input.RequiresCodeOwnerReviews),
+		RequireLastPushApproval:        gqlBool(input.RequireLastPushApproval),
+		RequiresStatusChecks:           gqlBool(input.RequiresStatusChecks),
+		RequiresStrictStatusChecks:     gqlBool(input.RequiresStrictStatusChecks),
+		RequiredStatusCheckContexts:    gqlStringsPtr(input.RequiredStatusCheckContexts),
+		RequiresDeployments:            gqlBool(input.RequiresDeployments),
+		RequiredDeploymentEnvironments: gqlStringsPtr(input.RequiredDeploymentEnvironments),
+		IsAdminEnforced:                gqlBool(input.IsAdminEnforced),
+		RequiresLinearHistory:          gqlBool(input.RequiresLinearHistory),
+		RequiresCommitSignatures:       gqlBool(input.RequiresCommitSignatures),
+		RequiresConversationResolution: gqlBool(input.RequiresConversationResolution),
+		AllowsForcePushes:              gqlBool(input.AllowsForcePushes),
+		AllowsDeletions:                gqlBool(input.AllowsDeletions),
+		BlocksCreations:                gqlBool(input.BlocksCreations),
+		LockBranch:                     gqlBool(input.LockBranch),
+		LockAllowsFetchAndMerge:        gqlBool(input.LockAllowsFetchAndMerge),
+		RestrictsPushes:                gqlBool(input.RestrictsPushes),
+		RestrictsReviewDismissals:      gqlBool(input.RestrictsReviewDismissals),
+		BypassPullRequestActorIDs:      gqlIDsPtr(input.BypassPullRequestActorIDs),
+		PushActorIDs:                   gqlIDsPtr(input.PushActorIDs),
+		ReviewDismissalActorIDs:        gqlIDsPtr(input.ReviewDismissalActorIDs),
 	}
 
 	if err := c.GraphQL.Mutate(ctx, &m, gqlInput, nil); err != nil {
 		return "", fmt.Errorf("creating branch protection rule for pattern %q: %w", pattern, err)
 	}
-	
+
 	return m.CreateBranchProtectionRule.BranchProtectionRule.ID.(string), nil
 }
 
@@ -224,38 +224,37 @@ func (c *Client) UpdateBranchProtectionRule(ctx context.Context, ruleID string, 
 		} `graphql:"updateBranchProtectionRule(input: $input)"`
 	}
 
-	contexts := toGitHubStrings(input.RequiredStatusCheckContexts)
 	gqlInput := githubv4.UpdateBranchProtectionRuleInput{
 		BranchProtectionRuleID:         ruleID,
-		RequiresApprovingReviews:       githubv4.NewBoolean(githubv4.Boolean(input.RequiresApprovingReviews)),
-		RequiredApprovingReviewCount:   githubv4.NewInt(githubv4.Int(input.RequiredApprovingReviewCount)),
-		DismissesStaleReviews:          githubv4.NewBoolean(githubv4.Boolean(input.DismissesStaleReviews)),
-		RequiresCodeOwnerReviews:       githubv4.NewBoolean(githubv4.Boolean(input.RequiresCodeOwnerReviews)),
-		RequireLastPushApproval:        githubv4.NewBoolean(githubv4.Boolean(input.RequireLastPushApproval)),
-		RequiresStatusChecks:           githubv4.NewBoolean(githubv4.Boolean(input.RequiresStatusChecks)),
-		RequiresStrictStatusChecks:     githubv4.NewBoolean(githubv4.Boolean(input.RequiresStrictStatusChecks)),
-		RequiredStatusCheckContexts:    &contexts,
-		RequiresDeployments:            githubv4.NewBoolean(githubv4.Boolean(input.RequiresDeployments)),
-		RequiredDeploymentEnvironments: toGitHubStringsPtr(input.RequiredDeploymentEnvironments),
-		IsAdminEnforced:                githubv4.NewBoolean(githubv4.Boolean(input.IsAdminEnforced)),
-		RequiresLinearHistory:          githubv4.NewBoolean(githubv4.Boolean(input.RequiresLinearHistory)),
-		RequiresCommitSignatures:       githubv4.NewBoolean(githubv4.Boolean(input.RequiresCommitSignatures)),
-		RequiresConversationResolution: githubv4.NewBoolean(githubv4.Boolean(input.RequiresConversationResolution)),
-		AllowsForcePushes:              githubv4.NewBoolean(githubv4.Boolean(input.AllowsForcePushes)),
-		AllowsDeletions:                githubv4.NewBoolean(githubv4.Boolean(input.AllowsDeletions)),
-		BlocksCreations:                githubv4.NewBoolean(githubv4.Boolean(input.BlocksCreations)),
-		LockBranch:                     githubv4.NewBoolean(githubv4.Boolean(input.LockBranch)),
-		LockAllowsFetchAndMerge:        githubv4.NewBoolean(githubv4.Boolean(input.LockAllowsFetchAndMerge)),
-		RestrictsPushes:                githubv4.NewBoolean(githubv4.Boolean(input.RestrictsPushes)),
-		RestrictsReviewDismissals:      githubv4.NewBoolean(githubv4.Boolean(input.RestrictsReviewDismissals)),
-		BypassPullRequestActorIDs:      toGitHubIDsPtr(input.BypassPullRequestActorIDs),
-		PushActorIDs:                   toGitHubIDsPtr(input.PushActorIDs),
-		ReviewDismissalActorIDs:        toGitHubIDsPtr(input.ReviewDismissalActorIDs),
+		RequiresApprovingReviews:       gqlBool(input.RequiresApprovingReviews),
+		RequiredApprovingReviewCount:   gqlInt(input.RequiredApprovingReviewCount),
+		DismissesStaleReviews:          gqlBool(input.DismissesStaleReviews),
+		RequiresCodeOwnerReviews:       gqlBool(input.RequiresCodeOwnerReviews),
+		RequireLastPushApproval:        gqlBool(input.RequireLastPushApproval),
+		RequiresStatusChecks:           gqlBool(input.RequiresStatusChecks),
+		RequiresStrictStatusChecks:     gqlBool(input.RequiresStrictStatusChecks),
+		RequiredStatusCheckContexts:    gqlStringsPtr(input.RequiredStatusCheckContexts),
+		RequiresDeployments:            gqlBool(input.RequiresDeployments),
+		RequiredDeploymentEnvironments: gqlStringsPtr(input.RequiredDeploymentEnvironments),
+		IsAdminEnforced:                gqlBool(input.IsAdminEnforced),
+		RequiresLinearHistory:          gqlBool(input.RequiresLinearHistory),
+		RequiresCommitSignatures:       gqlBool(input.RequiresCommitSignatures),
+		RequiresConversationResolution: gqlBool(input.RequiresConversationResolution),
+		AllowsForcePushes:              gqlBool(input.AllowsForcePushes),
+		AllowsDeletions:                gqlBool(input.AllowsDeletions),
+		BlocksCreations:                gqlBool(input.BlocksCreations),
+		LockBranch:                     gqlBool(input.LockBranch),
+		LockAllowsFetchAndMerge:        gqlBool(input.LockAllowsFetchAndMerge),
+		RestrictsPushes:                gqlBool(input.RestrictsPushes),
+		RestrictsReviewDismissals:      gqlBool(input.RestrictsReviewDismissals),
+		BypassPullRequestActorIDs:      gqlIDsPtr(input.BypassPullRequestActorIDs),
+		PushActorIDs:                   gqlIDsPtr(input.PushActorIDs),
+		ReviewDismissalActorIDs:        gqlIDsPtr(input.ReviewDismissalActorIDs),
 	}
 
 	if err := c.GraphQL.Mutate(ctx, &m, gqlInput, nil); err != nil {
 		return fmt.Errorf("updating branch protection rule %s: %w", ruleID, err)
 	}
-	
+
 	return nil
 }

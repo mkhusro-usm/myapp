@@ -71,7 +71,7 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 	if content == desiredContent {
 		return NewResult(co.Name(), repo.FullName(), nil), nil
 	}
-	
+
 	prURL, err := co.client.ProposeFileChange(
 		ctx, repo.Name, defaultBranch(repo),
 		codeownersPath,
@@ -88,7 +88,7 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 	r := NewResult(co.Name(), repo.FullName(), nil)
 	r.Applied = true
 	r.PullRequestURL = prURL
-	
+
 	return r, nil
 }
 
@@ -100,7 +100,7 @@ func (co *Codeowners) fetchContent(ctx context.Context, repo *gh.Repository) (st
 	if err != nil {
 		return "", fmt.Errorf("fetching CODEOWNERS for %s: %w", repo.FullName(), err)
 	}
-	
+
 	return content, nil
 }
 
@@ -119,7 +119,7 @@ func (co *Codeowners) check(content string) []Violation {
 	for _, entry := range co.settings.Entries {
 		violations = append(violations, checkEntry(content, entry)...)
 	}
-	
+
 	return violations
 }
 
@@ -133,7 +133,7 @@ func (co *Codeowners) buildContent() string {
 	for _, entry := range co.settings.Entries {
 		lines = append(lines, entry.line())
 	}
-	
+
 	return strings.Join(lines, "\n") + "\n"
 }
 
@@ -146,7 +146,7 @@ func checkEntry(content string, entry CodeownersEntry) []Violation {
 			return nil
 		}
 	}
-	
+
 	return []Violation{{
 		Field:    "codeowners-entry",
 		Expected: expected,
