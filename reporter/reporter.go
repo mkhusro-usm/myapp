@@ -22,10 +22,11 @@ type Report struct {
 
 // Summary holds aggregate counts for the report.
 type Summary struct {
-	Total        int `json:"total"`
-	Compliant    int `json:"compliant"`
-	NonCompliant int `json:"non-compliant"`
-	Applied      int `json:"applied"`
+	Total        int      `json:"total"`
+	Compliant    int      `json:"compliant"`
+	NonCompliant int      `json:"non-compliant"`
+	Applied      int      `json:"applied"`
+	PullRequests []string `json:"pull_requests,omitempty"`
 }
 
 // BuildReport constructs a Report from raw results and metadata.
@@ -40,6 +41,9 @@ func BuildReport(org string, mode rule.Mode, results []*rule.Result) *Report {
 			s.Compliant++
 		} else {
 			s.NonCompliant++
+		}
+		if r.PullRequestURL != "" {
+			s.PullRequests = append(s.PullRequests, r.PullRequestURL)
 		}
 	}
 	return &Report{

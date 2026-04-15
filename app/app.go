@@ -139,9 +139,21 @@ func (a *App) registerRules() error {
 		case "branch-protection":
 			settings, err := rule.ParseSettings[rule.BranchProtectionSettings](rc.Settings)
 			if err != nil {
-				return fmt.Errorf("parsing branch_protection settings: %w", err)
+				return fmt.Errorf("parsing branch-protection settings: %w", err)
 			}
 			a.registry.Register(rule.NewBranchProtection(a.client, settings))
+		case "codeowners":
+			settings, err := rule.ParseSettings[rule.CodeownersSettings](rc.Settings)
+			if err != nil {
+				return fmt.Errorf("parsing codeowners settings: %w", err)
+			}
+			a.registry.Register(rule.NewCodeowners(a.client, settings))
+		case "repo-settings":
+			settings, err := rule.ParseSettings[rule.RepoSettingsConfig](rc.Settings)
+			if err != nil {
+				return fmt.Errorf("parsing repo-settings settings: %w", err)
+			}
+			a.registry.Register(rule.NewRepoSettings(a.client, settings))
 		default:
 			log.Printf("warning: unknown rule %q, skipping", name)
 		}
@@ -214,6 +226,7 @@ func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[st
 		}
 		results = append(results, result)
 	}
+	
 	return results
 }
 

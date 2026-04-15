@@ -89,26 +89,15 @@ func (bp *BranchProtection) Evaluate(ctx context.Context, repo *gh.Repository) (
 		return nil, fmt.Errorf("fetching branch protection for %s: %w", repo.FullName(), err)
 	}
 	if protection == nil {
-		return &Result{
-			RuleName:   bp.Name(),
-			Repository: repo.FullName(),
-			Compliant:  false,
-			Violations: []Violation{{
-				Field:    "branch_protection",
-				Expected: "enabled",
-				Actual:   "none",
-				Message:  fmt.Sprintf("no branch protection rule matches %s", branch),
-			}},
-		}, nil
+		return NewResult(bp.Name(), repo.FullName(), []Violation{{
+			Field:    "branch_protection",
+			Expected: "enabled",
+			Actual:   "none",
+			Message:  fmt.Sprintf("no branch protection rule matches %s", branch),
+		}}), nil
 	}
 
-	violations := bp.check(protection)
-	return &Result{
-		RuleName:   bp.Name(),
-		Repository: repo.FullName(),
-		Compliant:  len(violations) == 0,
-		Violations: violations,
-	}, nil
+	return NewResult(bp.Name(), repo.FullName(), bp.check(protection)), nil
 }
 
 func (bp *BranchProtection) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
@@ -133,12 +122,9 @@ func (bp *BranchProtection) Apply(ctx context.Context, repo *gh.Repository) (*Re
 		return nil, fmt.Errorf("applying branch protection for %s: %w", repo.FullName(), err)
 	}
 
-	return &Result{
-		RuleName:   bp.Name(),
-		Repository: repo.FullName(),
-		Compliant:  true,
-		Applied:    true,
-	}, nil
+	r := NewResult(bp.Name(), repo.FullName(), nil)
+	r.Applied = true
+	return r, nil
 }
 
 func (bp *BranchProtection) desiredInput(ctx context.Context) (gh.BranchProtectionInput, error) {

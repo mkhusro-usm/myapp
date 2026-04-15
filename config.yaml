@@ -56,3 +56,30 @@ rules:
       #   users:
       #     - mkhusro-usm
       #   teams: []
+
+  codeowners:
+    enabled: true
+    settings:
+      entries:
+        - pattern: "*"
+          owners:
+            - "@mkhusro-usm"
+
+  repo-settings:
+    enabled: true
+    settings:
+      # Merge strategies
+      allow-merge-commit: true
+      allow-squash-merge: true
+      allow-rebase-merge: true
+
+      # Default commit messages
+      merge-commit-title: PR_TITLE            # PR_TITLE or MERGE_MESSAGE
+      merge-commit-message: PR_BODY           # PR_BODY, PR_TITLE, or BLANK
+      squash-merge-commit-title: PR_TITLE     # PR_TITLE or COMMIT_OR_PR_TITLE
+      squash-merge-commit-message: PR_BODY    # PR_BODY, COMMIT_MESSAGES, or BLANK
+
+      # PR behavior
+      allow-update-branch: true
+      allow-auto-merge: true
+      delete-branch-on-merge: true

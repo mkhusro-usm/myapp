@@ -9,11 +9,24 @@ import (
 
 // Result holds the outcome of evaluating or applying a single rule against a single repository.
 type Result struct {
-	RuleName   string      `json:"rule_name"`
-	Repository string      `json:"repository"`
-	Compliant  bool        `json:"compliant"`
-	Violations []Violation `json:"violations,omitempty"`
-	Applied    bool        `json:"applied"`
+	RuleName       string      `json:"rule_name"`
+	Repository     string      `json:"repository"`
+	Compliant      bool        `json:"compliant"`
+	ViolationCount int         `json:"violation_count"`
+	Violations     []Violation `json:"violations,omitempty"`
+	Applied        bool        `json:"applied"`
+	PullRequestURL string      `json:"pull_request_url,omitempty"`
+}
+
+// NewResult constructs a Result, automatically setting ViolationCount and Compliant.
+func NewResult(ruleName, repository string, violations []Violation) *Result {
+	return &Result{
+		RuleName:       ruleName,
+		Repository:     repository,
+		Compliant:      len(violations) == 0,
+		ViolationCount: len(violations),
+		Violations:     violations,
+	}
 }
 
 // Violation describes a specific policy drift found during evaluation.
