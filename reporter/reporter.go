@@ -22,30 +22,34 @@ type Report struct {
 
 // Summary holds aggregate counts for the report.
 type Summary struct {
-	Total        int      `json:"total"`
-	Compliant    int      `json:"compliant"`
-	NonCompliant int      `json:"non-compliant"`
-	Applied      int      `json:"applied"`
-	PullRequests []string `json:"pull_requests,omitempty"`
+	Repositories      int      `json:"repositories"`
+	TotalEvaluations  int      `json:"total_evaluations"`
+	CompliantResults  int      `json:"compliant_results"`
+	NonCompliantResults int    `json:"non_compliant_results"`
+	AppliedResults    int      `json:"applied_results"`
+	PullRequests      []string `json:"pull_requests,omitempty"`
 }
 
 // BuildReport constructs a Report from raw results and metadata.
 func BuildReport(org string, mode rule.Mode, results []*rule.Result) *Report {
 	var s Summary
-	s.Total = len(results)
+	repos := make(map[string]struct{})
+	s.TotalEvaluations = len(results)
 	for _, r := range results {
+		repos[r.Repository] = struct{}{}
 		if r.Applied {
-			s.Applied++
+			s.AppliedResults++
 		}
 		if r.Compliant {
-			s.Compliant++
+			s.CompliantResults++
 		} else {
-			s.NonCompliant++
+			s.NonCompliantResults++
 		}
 		if r.PullRequestURL != "" {
 			s.PullRequests = append(s.PullRequests, r.PullRequestURL)
 		}
 	}
+	s.Repositories = len(repos)
 	
 	return &Report{
 		Timestamp:    time.Now().UTC(),

@@ -229,8 +229,8 @@ func (a *App) run(ctx context.Context) error {
 
 	report := reporter.BuildReport(a.config.Org, a.mode, results)
 
-	log.Printf("run complete: %d total, %d compliant, %d non-compliant, %d applied",
-		report.Summary.Total, report.Summary.Compliant, report.Summary.NonCompliant, report.Summary.Applied)
+	log.Printf("run complete: %d repositories, %d evaluations, %d compliant, %d non-compliant, %d applied",
+		report.Summary.Repositories, report.Summary.TotalEvaluations, report.Summary.CompliantResults, report.Summary.NonCompliantResults, report.Summary.AppliedResults)
 	if len(report.Summary.PullRequests) > 0 {
 		log.Printf("pull requests created: %d", len(report.Summary.PullRequests))
 	}
