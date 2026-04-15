@@ -33,11 +33,13 @@ func toGitHubStrings(ss []string) []githubv4.String {
 	for i, s := range ss {
 		out[i] = githubv4.String(s)
 	}
+	
 	return out
 }
 
 func toGitHubStringsPtr(ss []string) *[]githubv4.String {
 	out := toGitHubStrings(ss)
+	
 	return &out
 }
 
@@ -46,5 +48,6 @@ func toGitHubIDsPtr(ids []string) *[]githubv4.ID {
 	for i, id := range ids {
 		out[i] = githubv4.ID(id)
 	}
+	
 	return &out
 }

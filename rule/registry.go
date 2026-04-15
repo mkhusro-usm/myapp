@@ -18,6 +18,7 @@ func (r *Registry) Register(rule Rule) {
 // Get retrieves a rule by name. Returns false if not found.
 func (r *Registry) Get(name string) (Rule, bool) {
 	rule, ok := r.rules[name]
+	
 	return rule, ok
 }
 

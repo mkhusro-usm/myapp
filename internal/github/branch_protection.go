@@ -163,6 +163,7 @@ func (c *Client) GetBranchProtectionRule(ctx context.Context, repoName, branch s
 		}
 		variables["cursor"] = githubv4.NewString(q.Repository.BranchProtectionRules.PageInfo.EndCursor)
 	}
+	
 	return nil, nil
 }
 
@@ -209,6 +210,7 @@ func (c *Client) CreateBranchProtectionRule(ctx context.Context, repoID, pattern
 	if err := c.GraphQL.Mutate(ctx, &m, gqlInput, nil); err != nil {
 		return "", fmt.Errorf("creating branch protection rule for pattern %q: %w", pattern, err)
 	}
+	
 	return m.CreateBranchProtectionRule.BranchProtectionRule.ID.(string), nil
 }
 
@@ -254,5 +256,6 @@ func (c *Client) UpdateBranchProtectionRule(ctx context.Context, ruleID string, 
 	if err := c.GraphQL.Mutate(ctx, &m, gqlInput, nil); err != nil {
 		return fmt.Errorf("updating branch protection rule %s: %w", ruleID, err)
 	}
+	
 	return nil
 }

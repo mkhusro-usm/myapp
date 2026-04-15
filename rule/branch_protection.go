@@ -59,11 +59,11 @@ type BranchProtectionSettings struct {
 	RequireConversationResolution bool `yaml:"require-conversation-resolution"`
 
 	// Branch restrictions
-	AllowForcePushes    bool      `yaml:"allow-force-pushes"`
-	AllowDeletions      bool      `yaml:"allow-deletions"`
-	BlockCreations      bool      `yaml:"block-creations"`
-	LockBranch          bool      `yaml:"lock-branch"`
-	AllowForkSyncing    bool      `yaml:"allow-fork-syncing"`
+	AllowForcePushes      bool      `yaml:"allow-force-pushes"`
+	AllowDeletions        bool      `yaml:"allow-deletions"`
+	BlockCreations        bool      `yaml:"block-creations"`
+	LockBranch            bool      `yaml:"lock-branch"`
+	AllowForkSyncing      bool      `yaml:"allow-fork-syncing"`
 	PushRestrictionActors ActorList `yaml:"push-restriction-actors"`
 }
 
@@ -86,12 +86,14 @@ func (bp *BranchProtection) Name() string {
 }
 
 func (bp *BranchProtection) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {
+	log.Printf("[%s] evaluating repository branch protection", repo.FullName())
 	branch := defaultBranch(repo)
 
 	protection, err := bp.client.GetBranchProtectionRule(ctx, repo.Name, branch)
 	if err != nil {
 		return nil, fmt.Errorf("fetching branch protection for %s: %w", repo.FullName(), err)
 	}
+	
 	if protection == nil {
 		return NewResult(bp.Name(), repo.FullName(), []Violation{{
 			Field:    "branch_protection",
@@ -105,6 +107,7 @@ func (bp *BranchProtection) Evaluate(ctx context.Context, repo *gh.Repository) (
 }
 
 func (bp *BranchProtection) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
+	log.Printf("[%s] applying repository branch protection", repo.FullName())
 	branch := defaultBranch(repo)
 
 	protection, err := bp.client.GetBranchProtectionRule(ctx, repo.Name, branch)
@@ -124,12 +127,14 @@ func (bp *BranchProtection) Apply(ctx context.Context, repo *gh.Repository) (*Re
 		log.Printf("[%s] updating branch protection rule for %s", repo.FullName(), branch)
 		err = bp.client.UpdateBranchProtectionRule(ctx, protection.ID, input)
 	}
+	
 	if err != nil {
 		return nil, fmt.Errorf("applying branch protection for %s: %w", repo.FullName(), err)
 	}
 
 	r := NewResult(bp.Name(), repo.FullName(), nil)
 	r.Applied = true
+	
 	return r, nil
 }
 
@@ -326,6 +331,7 @@ func missingStrings(required, actual []string) []string {
 	for _, c := range actual {
 		have[c] = true
 	}
+	
 	var missing []string
 	for _, c := range required {
 		if !have[c] {
@@ -333,6 +339,7 @@ func missingStrings(required, actual []string) []string {
 		}
 	}
 	sort.Strings(missing)
+	
 	return missing
 }
 
@@ -342,5 +349,6 @@ func defaultBranch(repo *gh.Repository) string {
 	if repo.DefaultBranch != "" {
 		return repo.DefaultBranch
 	}
+	
 	return defaultBranchFallback
 }

@@ -47,6 +47,7 @@ func parseActors(nodes []actorNode) []Actor {
 			actors = append(actors, Actor{Type: ActorTypeApp, Name: n.Actor.App.Slug})
 		}
 	}
+	
 	return actors
 }
 
@@ -63,6 +64,7 @@ func (c *Client) ResolveUserID(ctx context.Context, login string) (string, error
 	if err := c.GraphQL.Query(ctx, &q, variables); err != nil {
 		return "", fmt.Errorf("resolving user %q: %w", login, err)
 	}
+	
 	return q.User.ID.(string), nil
 }
 
@@ -82,6 +84,7 @@ func (c *Client) ResolveTeamID(ctx context.Context, slug string) (string, error)
 	if err := c.GraphQL.Query(ctx, &q, variables); err != nil {
 		return "", fmt.Errorf("resolving team %q: %w", slug, err)
 	}
+	
 	return q.Organization.Team.ID.(string), nil
 }
 
@@ -95,6 +98,7 @@ func (c *Client) ResolveActorIDs(ctx context.Context, users, teams []string) ([]
 		}
 		ids = append(ids, id)
 	}
+	
 	for _, slug := range teams {
 		id, err := c.ResolveTeamID(ctx, slug)
 		if err != nil {
@@ -102,5 +106,6 @@ func (c *Client) ResolveActorIDs(ctx context.Context, users, teams []string) ([]
 		}
 		ids = append(ids, id)
 	}
+	
 	return ids, nil
 }

@@ -167,6 +167,7 @@ func (a *App) registerRules() error {
 			log.Printf("warning: unknown rule %q, skipping", name)
 		}
 	}
+	
 	return nil
 }
 
@@ -221,6 +222,7 @@ func (a *App) run(ctx context.Context) error {
 	if a.outputPath != "" {
 		log.Printf("writing report to %s", a.outputPath)
 	}
+	
 	if err := report.Write(a.outputPath); err != nil {
 		log.Printf("error writing report: %v", err)
 	}
@@ -271,8 +273,8 @@ func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
 		}
 		return []gh.Repository{*repo}, nil
 	}
-
 	log.Printf("listing all repositories accessible to the GitHub App")
+	
 	return a.client.ListRepositories(ctx)
 }
 

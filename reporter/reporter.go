@@ -46,6 +46,7 @@ func BuildReport(org string, mode rule.Mode, results []*rule.Result) *Report {
 			s.PullRequests = append(s.PullRequests, r.PullRequestURL)
 		}
 	}
+	
 	return &Report{
 		Timestamp:    time.Now().UTC(),
 		Organization: org,
@@ -78,5 +79,6 @@ func (r *Report) Write(outputPath string) error {
 func writeJSON(w io.Writer, report *Report) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	
 	return enc.Encode(report)
 }

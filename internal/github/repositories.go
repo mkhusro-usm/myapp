@@ -101,5 +101,6 @@ func (c *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
 		}
 		variables["cursor"] = githubv4.NewString(q.Viewer.Repositories.PageInfo.EndCursor)
 	}
+	
 	return repos, nil
 }

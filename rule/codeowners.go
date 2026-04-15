@@ -47,6 +47,7 @@ func (co *Codeowners) Name() string {
 
 // Evaluate checks whether the repository's CODEOWNERS file contains all required entries.
 func (co *Codeowners) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {
+	log.Printf("[%s] evaluating repository CODEOWNERS", repo.FullName())
 	content, err := co.fetchContent(ctx, repo)
 	if err != nil {
 		return nil, err
@@ -58,6 +59,7 @@ func (co *Codeowners) Evaluate(ctx context.Context, repo *gh.Repository) (*Resul
 // Apply creates a pull request that adds or updates the CODEOWNERS file
 // so that all required entries are present.
 func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
+	log.Printf("[%s] applying repository CODEOWNERS", repo.FullName())
 	content, err := co.fetchContent(ctx, repo)
 	if err != nil {
 		return nil, err
@@ -69,10 +71,9 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 	if content == desiredContent {
 		return NewResult(co.Name(), repo.FullName(), nil), nil
 	}
-	branch := defaultBranch(repo)
-
+	
 	prURL, err := co.client.ProposeFileChange(
-		ctx, repo.Name, branch,
+		ctx, repo.Name, defaultBranch(repo),
 		codeownersPath,
 		codeownersBranchPrefix,
 		codeownersCommitMsg,
@@ -84,11 +85,10 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 		return nil, err
 	}
 
-	log.Printf("created CODEOWNERS PR for %s: %s", repo.FullName(), prURL)
-
 	r := NewResult(co.Name(), repo.FullName(), nil)
 	r.Applied = true
 	r.PullRequestURL = prURL
+	
 	return r, nil
 }
 
@@ -100,6 +100,7 @@ func (co *Codeowners) fetchContent(ctx context.Context, repo *gh.Repository) (st
 	if err != nil {
 		return "", fmt.Errorf("fetching CODEOWNERS for %s: %w", repo.FullName(), err)
 	}
+	
 	return content, nil
 }
 
@@ -118,6 +119,7 @@ func (co *Codeowners) check(content string) []Violation {
 	for _, entry := range co.settings.Entries {
 		violations = append(violations, checkEntry(content, entry)...)
 	}
+	
 	return violations
 }
 
@@ -131,6 +133,7 @@ func (co *Codeowners) buildContent() string {
 	for _, entry := range co.settings.Entries {
 		lines = append(lines, entry.line())
 	}
+	
 	return strings.Join(lines, "\n") + "\n"
 }
 
@@ -143,6 +146,7 @@ func checkEntry(content string, entry CodeownersEntry) []Violation {
 			return nil
 		}
 	}
+	
 	return []Violation{{
 		Field:    "codeowners-entry",
 		Expected: expected,
