@@ -7,9 +7,16 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+// Actor type constants returned by the GitHub GraphQL API.
+const (
+	ActorTypeUser = "User"
+	ActorTypeTeam = "Team"
+	ActorTypeApp  = "App"
+)
+
 // Actor represents a GitHub actor (user, team, or app) resolved from a branch protection rule.
 type Actor struct {
-	Type string // "User", "Team", or "App"
+	Type string // ActorTypeUser, ActorTypeTeam, or ActorTypeApp
 	Name string // login, slug, or app slug
 }
 
@@ -33,11 +40,11 @@ func parseActors(nodes []actorNode) []Actor {
 	for _, n := range nodes {
 		switch {
 		case n.Actor.User.Login != "":
-			actors = append(actors, Actor{Type: "User", Name: n.Actor.User.Login})
+			actors = append(actors, Actor{Type: ActorTypeUser, Name: n.Actor.User.Login})
 		case n.Actor.Team.Slug != "":
-			actors = append(actors, Actor{Type: "Team", Name: n.Actor.Team.Slug})
+			actors = append(actors, Actor{Type: ActorTypeTeam, Name: n.Actor.Team.Slug})
 		case n.Actor.App.Slug != "":
-			actors = append(actors, Actor{Type: "App", Name: n.Actor.App.Slug})
+			actors = append(actors, Actor{Type: ActorTypeApp, Name: n.Actor.App.Slug})
 		}
 	}
 	return actors

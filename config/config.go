@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config is the top-level governance configuration loaded from YAML.
 type Config struct {
 	GitHubApp   GitHubAppConfig       `yaml:"github-app"`
 	Org         string                `yaml:"org"`
@@ -14,12 +15,14 @@ type Config struct {
 	Rules       map[string]RuleConfig `yaml:"rules"`
 }
 
+// GitHubAppConfig holds credentials for authenticating as a GitHub App.
 type GitHubAppConfig struct {
 	AppID          int64  `yaml:"app-id"`
 	InstallationID int64  `yaml:"installation-id"`
 	PrivateKeyPath string `yaml:"private-key-path"`
 }
 
+// RuleConfig represents a single rule's toggle and settings from the config file.
 type RuleConfig struct {
 	Enabled  bool           `yaml:"enabled"`
 	Settings map[string]any `yaml:"settings"`

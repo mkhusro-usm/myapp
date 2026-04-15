@@ -32,6 +32,7 @@ func (a ActorList) allNames() []string {
 	return names
 }
 
+// BranchProtectionSettings holds the desired branch protection configuration from YAML.
 type BranchProtectionSettings struct {
 	// Pull request reviews
 	RequirePullRequestReviews    bool      `yaml:"require-pull-request-reviews"`
@@ -66,11 +67,13 @@ type BranchProtectionSettings struct {
 	PushRestrictionActors ActorList `yaml:"push-restriction-actors"`
 }
 
+// BranchProtection enforces branch protection rules on the default branch.
 type BranchProtection struct {
 	client   *gh.Client
 	settings BranchProtectionSettings
 }
 
+// NewBranchProtection creates a BranchProtection rule with the given settings.
 func NewBranchProtection(client *gh.Client, settings BranchProtectionSettings) *BranchProtection {
 	return &BranchProtection{
 		client:   client,
@@ -79,7 +82,7 @@ func NewBranchProtection(client *gh.Client, settings BranchProtectionSettings) *
 }
 
 func (bp *BranchProtection) Name() string {
-	return "branch_protection"
+	return "branch-protection"
 }
 
 func (bp *BranchProtection) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {
@@ -333,9 +336,11 @@ func missingStrings(required, actual []string) []string {
 	return missing
 }
 
+const defaultBranchFallback = "main"
+
 func defaultBranch(repo *gh.Repository) string {
 	if repo.DefaultBranch != "" {
 		return repo.DefaultBranch
 	}
-	return "main"
+	return defaultBranchFallback
 }

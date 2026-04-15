@@ -17,6 +17,11 @@ import (
 	"github.com/mkhusro-usm/myapp/rule"
 )
 
+const (
+	defaultConfigPath = "config.yaml"
+	envPrivateKey     = "GH_APP_PRIVATE_KEY"
+)
+
 // Option is a functional option for configuring the App.
 type Option func(*App)
 
@@ -55,7 +60,7 @@ type App struct {
 
 // Run is the top-level entry point. It parses flags, loads config, and executes the app.
 func Run(ctx context.Context) error {
-	configPath := flag.String("config", "config.yaml", "path to config file")
+	configPath := flag.String("config", defaultConfigPath, "path to config file")
 	repo := flag.String("repo", "", "target a single repository (e.g. my-repo)")
 	mode := flag.String("mode", "evaluate", "run mode: evaluate or apply")
 	output := flag.String("output", "", "path to write JSON report (e.g. reports/compliance.json)")
@@ -275,12 +280,12 @@ func loadPrivateKey(privateKeyPath string) (
 	[]byte,
 	error,
 ) {
-	if key := os.Getenv("GH_APP_PRIVATE_KEY"); key != "" {
+	if key := os.Getenv(envPrivateKey); key != "" {
 		return []byte(key), nil
 	}
 
 	if privateKeyPath == "" {
-		return nil, fmt.Errorf("no private key: set GH_APP_PRIVATE_KEY env var or private_key_path in config")
+		return nil, fmt.Errorf("no private key: set %s env var or private-key-path in config", envPrivateKey)
 	}
 
 	return os.ReadFile(privateKeyPath)

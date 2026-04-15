@@ -22,17 +22,19 @@ type RepoSettingsConfig struct {
 	MergeCommitMessage       string `yaml:"merge-commit-message"`
 }
 
+// RepoSettings enforces repository-level PR and merge settings.
 type RepoSettings struct {
 	client   *gh.Client
 	settings RepoSettingsConfig
 }
 
+// NewRepoSettings creates a RepoSettings rule with the given settings.
 func NewRepoSettings(client *gh.Client, settings RepoSettingsConfig) *RepoSettings {
 	return &RepoSettings{client: client, settings: settings}
 }
 
 func (rs *RepoSettings) Name() string {
-	return "repo_settings"
+	return "repo-settings"
 }
 
 func (rs *RepoSettings) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {

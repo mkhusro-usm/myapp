@@ -9,6 +9,12 @@ import (
 	gh "github.com/mkhusro-usm/myapp/internal/github"
 )
 
+const (
+	codeownersPath         = ".github/CODEOWNERS"
+	codeownersBranchPrefix = "governance/codeowners"
+	codeownersCommitMsg    = "chore: update CODEOWNERS per governance policy"
+)
+
 // CodeownersEntry represents a single required CODEOWNERS line.
 type CodeownersEntry struct {
 	Pattern string   `yaml:"pattern"`
@@ -67,10 +73,10 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 
 	prURL, err := co.client.ProposeFileChange(
 		ctx, repo.Name, branch,
-		".github/CODEOWNERS",
-		"governance/codeowners",
-		"chore: update CODEOWNERS per governance policy",
-		"chore: update CODEOWNERS per governance policy",
+		codeownersPath,
+		codeownersBranchPrefix,
+		codeownersCommitMsg,
+		codeownersCommitMsg,
 		"This PR was automatically created by the governance tool to ensure CODEOWNERS compliance.",
 		[]byte(desiredContent),
 	)
@@ -89,7 +95,7 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 // fetchContent retrieves the current CODEOWNERS file content.
 // Returns an empty string (without error) when the file does not exist.
 func (co *Codeowners) fetchContent(ctx context.Context, repo *gh.Repository) (string, error) {
-	expression := defaultBranch(repo) + ":.github/CODEOWNERS"
+	expression := defaultBranch(repo) + ":" + codeownersPath
 	content, err := co.client.GetFileContent(ctx, repo.Name, expression)
 	if err != nil {
 		return "", fmt.Errorf("fetching CODEOWNERS for %s: %w", repo.FullName(), err)
@@ -104,7 +110,7 @@ func (co *Codeowners) check(content string) []Violation {
 			Field:    "codeowners",
 			Expected: "present",
 			Actual:   "missing",
-			Message:  "CODEOWNERS file not found at .github/CODEOWNERS",
+			Message:  fmt.Sprintf("CODEOWNERS file not found at %s", codeownersPath),
 		}}
 	}
 

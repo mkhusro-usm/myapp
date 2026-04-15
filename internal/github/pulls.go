@@ -9,9 +9,11 @@ import (
 	gogithub "github.com/google/go-github/v62/github"
 )
 
+const refsHeadsPrefix = "refs/heads/"
+
 // GetBranchSHA returns the commit SHA at the tip of the given branch.
 func (c *Client) GetBranchSHA(ctx context.Context, repoName, branch string) (string, error) {
-	ref, _, err := c.REST.Git.GetRef(ctx, c.org, repoName, "refs/heads/"+branch)
+	ref, _, err := c.REST.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+branch)
 	if err != nil {
 		return "", fmt.Errorf("getting ref for branch %s: %w", branch, err)
 	}
@@ -20,7 +22,7 @@ func (c *Client) GetBranchSHA(ctx context.Context, repoName, branch string) (str
 
 // CreateBranch creates a new branch pointing at the given base SHA.
 func (c *Client) CreateBranch(ctx context.Context, repoName, branchName, baseSHA string) error {
-	ref := "refs/heads/" + branchName
+	ref := refsHeadsPrefix + branchName
 	_, _, err := c.REST.Git.CreateRef(ctx, c.org, repoName, &gogithub.Reference{
 		Ref:    &ref,
 		Object: &gogithub.GitObject{SHA: &baseSHA},
