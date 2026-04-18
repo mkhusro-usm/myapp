@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	gogithub "github.com/google/go-github/v62/github"
+	gogithub "github.com/google/go-github/v84/github"
 )
 
 // RepoSettings represents the pull request and merge settings for a repository.

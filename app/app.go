@@ -148,12 +148,17 @@ func (a *App) registerRules() error {
 		}
 		log.Printf("registering rule: %s (scope: %s)", name, rc.Scope)
 		switch name {
-		case "branch-protection":
-			settings, err := rule.ParseSettings[rule.BranchProtectionSettings](rc.Settings)
+		case "org-rulesets", "repo-rulesets":
+			settings, err := rule.ParseSettings[rule.RulesetsSettings](rc.Settings)
 			if err != nil {
-				return fmt.Errorf("parsing branch-protection settings: %w", err)
+				return fmt.Errorf("parsing rulesets settings: %w", err)
 			}
-			a.registry.RegisterRepoRule(rule.NewBranchProtection(a.client, settings))
+			switch rc.Scope {
+			case "org":
+				a.registry.RegisterOrgRule(rule.NewOrgRulesets(a.client, settings))
+			case "repo":
+				a.registry.RegisterRepoRule(rule.NewRepoRulesets(a.client, settings))
+			}
 		case "codeowners":
 			settings, err := rule.ParseSettings[rule.CodeownersSettings](rc.Settings)
 			if err != nil {

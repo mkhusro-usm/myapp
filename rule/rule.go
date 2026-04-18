@@ -53,6 +53,15 @@ type OrgRule interface {
 	Apply(ctx context.Context) (*Result, error)
 }
 
+const defaultBranchFallback = "main"
+
+func defaultBranch(repo *gh.Repository) string {
+	if repo.DefaultBranch != "" {
+		return repo.DefaultBranch
+	}
+	return defaultBranchFallback
+}
+
 // ParseSettings converts a generic settings map into a typed struct via YAML round-trip.
 // Each rule defines its own settings struct with yaml tags.
 func ParseSettings[T any](raw map[string]any) (T, error) {

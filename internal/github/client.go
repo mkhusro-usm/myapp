@@ -3,7 +3,7 @@ package github
 import (
 	"net/http"
 
-	gogithub "github.com/google/go-github/v62/github"
+	gogithub "github.com/google/go-github/v84/github"
 	"github.com/shurcooL/githubv4"
 )
 

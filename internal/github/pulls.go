@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	gogithub "github.com/google/go-github/v62/github"
+	gogithub "github.com/google/go-github/v84/github"
 )
 
 const refsHeadsPrefix = "refs/heads/"
@@ -24,9 +24,9 @@ func (c *Client) GetBranchSHA(ctx context.Context, repoName, branch string) (str
 // CreateBranch creates a new branch pointing at the given base SHA.
 func (c *Client) CreateBranch(ctx context.Context, repoName, branchName, baseSHA string) error {
 	ref := refsHeadsPrefix + branchName
-	_, _, err := c.REST.Git.CreateRef(ctx, c.org, repoName, &gogithub.Reference{
-		Ref:    &ref,
-		Object: &gogithub.GitObject{SHA: &baseSHA},
+	_, _, err := c.REST.Git.CreateRef(ctx, c.org, repoName, gogithub.CreateRef{
+		Ref: ref,
+		SHA: baseSHA,
 	})
 	if err != nil {
 		return fmt.Errorf("creating branch %s: %w", branchName, err)

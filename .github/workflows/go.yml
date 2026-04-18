@@ -3,11 +3,6 @@ name: Governance Check
 on:
   schedule:
     - cron: "0 8 * * *" # Daily at 8am UTC
-  push:
-    branches: [main]
-    paths:
-      - config.yaml
-      - .github/workflows/go.yml
   workflow_dispatch:
     inputs:
       mode:

@@ -10,56 +10,127 @@ org: mkhusro-usm
 concurrency: 10
 
 rules:
-  branch-protection:
+  org-rulesets:
+    enabled: false
+    scope: org
+    settings:
+      rulesets:
+        - name: "default-branch-protection"
+          target: branch
+          enforcement: active
+          bypass-actors:
+            - actor-type: OrganizationAdmin
+              bypass-mode: always
+          conditions:
+            ref-name:
+              include:
+                - "~DEFAULT_BRANCH"
+              exclude: []
+            repository-name:
+              include:
+                - "~ALL"
+              exclude: []
+          rules:
+            # Restrict rules
+            creation: true
+            update: true
+            deletion: true
+
+            # Pull request reviews
+            pull-request:
+              dismiss-stale-reviews-on-push: true
+              require-code-owner-review: true
+              require-last-push-approval: true
+              required-approving-review-count: 1
+              required-review-thread-resolution: true
+
+            # Status checks
+            required-status-checks:
+              strict-required-status-checks-policy: true
+              required-status-checks:
+                - context: "ci/build"
+                - context: "ci/test"
+
+            # Deployments
+            required-deployments:
+              required-deployment-environments:
+                - "production"
+
+            # Code scanning
+            code-scanning:
+              code-scanning-tools:
+                - tool: "CodeQL"
+                  alerts-threshold: "errors"
+                  security-alerts-threshold: "critical"
+
+            # Copilot code review
+            copilot-code-review:
+              review-on-push: true
+              review-draft-pull-requests: false
+
+            # Branch rules
+            required-linear-history: true
+            required-signatures: true
+            non-fast-forward: true
+
+  repo-rulesets:
     enabled: true
     scope: repo
     settings:
-      # Pull request reviews
-      require-pull-request-reviews: true
-      required-approving-review-count: 1
-      dismiss-stale-reviews: true
-      require-code-owner-reviews: true
-      require-last-push-approval: true
-      # Actor-based settings require an organization repository
-      # bypass-pull-request-actors:
-      #   users:
-      #     - mkhusro-usm
-      #   teams: []
-      # review-dismissal-actors:
-      #   users:
-      #     - mkhusro-usm
-      #   teams: []
+      rulesets:
+        - name: "default-branch-protection"
+          target: branch
+          enforcement: active
+          conditions:
+            ref-name:
+              include:
+                - "~DEFAULT_BRANCH"
+              exclude: []
+          rules:
+            # Restrict rules
+            creation: true
+            update: true
+            deletion: true
 
-      # Status checks
-      require-status-checks: true
-      require-up-to-date-branch: true
-      required-status-check-contexts:
-        - ci/build
-        - ci/test
+            # Pull request reviews
+            pull-request:
+              dismiss-stale-reviews-on-push: true
+              require-code-owner-review: true
+              require-last-push-approval: true
+              required-approving-review-count: 1
+              required-review-thread-resolution: true
 
-      # Deployments
-      require-deployments: true
-      required-deployment-environments: []
+            # Status checks
+            required-status-checks:
+              strict-required-status-checks-policy: true
+              required-status-checks:
+                - context: "ci/build"
+                - context: "ci/test"
 
-      # Admin and merge rules
-      enforce-admins: true
-      require-linear-history: true
-      require-signed-commits: true
-      require-conversation-resolution: true
+            # Deployments (uncomment when environments are configured)
+            # required-deployments:
+            #   required-deployment-environments:
+            #     - "production"
 
-      # Branch restrictions
-      allow-force-pushes: true
-      allow-deletions: true
-      block-creations: true
-      lock-branch: true
-      allow-fork-syncing: true
-      # push-restriction-actors:
-      #   users:
-      #     - mkhusro-usm
-      #   teams: []
+            # Code scanning
+            code-scanning:
+              code-scanning-tools:
+                - tool: "CodeQL"
+                  alerts-threshold: "errors"
+                  security-alerts-threshold: "critical"
+
+            # Copilot code review
+            copilot-code-review:
+              review-on-push: true
+              review-draft-pull-requests: false
+
+            # Branch rules
+            required-linear-history: true
+            required-signatures: true
+            non-fast-forward: true
 
   codeowners:
-    enabled: true
+    enabled: false
     scope: repo
     settings:
       entries:
@@ -68,7 +139,7 @@ rules:
             - "@mkhusro-usm"
 
   repo-settings:
-    enabled: true
+    enabled: false
     scope: repo
     settings:
       # Merge strategies
