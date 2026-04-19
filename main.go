@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/mkhusro-usm/myapp/app"
 	"github.com/mkhusro-usm/myapp/config"
@@ -73,5 +74,16 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	return application.Run(ctx)
+	// Handle cancellation and timeout.
+	go func() {
+		<-ctx.Done()
+		log.Println("context cancelled or timed out, shutting down...")
+		os.Exit(1)
+	}()
+
+	// Run with timeout.
+	runCtx, runCancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer runCancel()
+
+	return application.Run(runCtx)
 }
