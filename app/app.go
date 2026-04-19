@@ -1,3 +1,8 @@
+// Package app provides the main application logic for governance enforcement.
+//
+// The App loads configuration, authenticates as a GitHub App, and executes governance
+// rules in two phases: org-scoped rules first, then repo-scoped rules.
+// Results are collected and written as a JSON report.
 package app
 
 import (
@@ -18,11 +23,8 @@ import (
 
 const envPrivateKey = "GH_APP_PRIVATE_KEY"
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-// App is the central struct holding all injected dependencies.
+// App is the central application struct holding all dependencies.
+// It coordinates rule execution across repositories and produces reports.
 type App struct {
 	config     *config.Config
 	client     *gh.Client
@@ -33,7 +35,7 @@ type App struct {
 	outputPath string
 }
 
-// Option is a functional option for configuring the App.
+// Option is a functional option for configuring an App instance.
 type Option func(*App)
 
 // WithTargetRepo scopes the run to a single repository.
@@ -58,10 +60,6 @@ func WithOutput(path string) Option {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Public methods
-// ---------------------------------------------------------------------------
-
 // New constructs a fully initialized App from the given config, overrides, and options.
 // It sets up the GitHub App client, registers all enabled rules, and returns an App
 // ready to execute via Run. Per-repo overrides are passed through to individual rules
@@ -84,8 +82,6 @@ func New(cfg *config.Config, overrides map[string]config.RepoOverride, opts ...O
 
 	httpClient := &http.Client{Transport: transport}
 	client := gh.NewClient(httpClient, cfg.Org)
-
-	log.Printf("authenticated as GitHub App (app-id: %d, installation-id: %d)", cfg.GitHubApp.AppID, cfg.GitHubApp.InstallationID)
 
 	a := &App{
 		config:    cfg,
@@ -179,10 +175,8 @@ func (a *App) Run(ctx context.Context) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Private helpers — called by New
-// ---------------------------------------------------------------------------
-
+// loadPrivateKey retrieves the GitHub App private key.
+// It first checks the environment variable, then falls back to reading the file.
 func loadPrivateKey(privateKeyPath string) ([]byte, error) {
 	if key := os.Getenv(envPrivateKey); key != "" {
 		return []byte(key), nil
@@ -195,9 +189,8 @@ func loadPrivateKey(privateKeyPath string) ([]byte, error) {
 	return os.ReadFile(privateKeyPath)
 }
 
-// registerRules creates and registers all enabled rules. Per-repo overrides are
-// passed to each rule's constructor — it is the rule's responsibility to extract,
-// parse, and validate its own overrides.
+// registerRules iterates over the config rules and registers enabled ones.
+// Per-repo overrides are passed to each rule's constructor for rule-specific handling.
 func (a *App) registerRules(overrides map[string]config.RepoOverride) error {
 	for name, rc := range a.config.Rules {
 		if !rc.Enabled {
@@ -235,10 +228,7 @@ func (a *App) registerRules(overrides map[string]config.RepoOverride) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Private helpers — called by Run
-// ---------------------------------------------------------------------------
-
+// processOrgRules runs all org-scoped rules and collects their results.
 func (a *App) processOrgRules(ctx context.Context, rules map[string]rule.OrgRule) []*rule.Result {
 	var results []*rule.Result
 	for _, r := range rules {
@@ -263,6 +253,8 @@ func (a *App) processOrgRules(ctx context.Context, rules map[string]rule.OrgRule
 	return results
 }
 
+// fetchRepos returns the list of repositories to process.
+// If targetRepo is set, it returns only that repository; otherwise it lists all accessible repos.
 func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
 	if a.targetRepo != "" {
 		log.Printf("targeting single repository: %s", a.targetRepo)
@@ -277,6 +269,7 @@ func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
 	return a.client.ListRepositories(ctx)
 }
 
+// processRepo runs all repo-scoped rules against a single repository and collects their results.
 func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[string]rule.RepoRule) []*rule.Result {
 	log.Printf("[%s] processing repository (%d rules)", repo.FullName(), len(rules))
 	var results []*rule.Result
@@ -303,6 +296,7 @@ func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[st
 	return results
 }
 
+// logResult logs the outcome of a rule evaluation.
 func (a *App) logResult(scope, ruleName string, result *rule.Result) {
 	if result.Compliant {
 		log.Printf("[%s] %s: compliant", scope, ruleName)

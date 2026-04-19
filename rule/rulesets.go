@@ -11,10 +11,6 @@ import (
 	gh "github.com/mkhusro-usm/myapp/internal/github"
 )
 
-// ---------------------------------------------------------------------------
-// Config types (parsed from YAML)
-// ---------------------------------------------------------------------------
-
 // RulesetsSettings is the top-level settings for the rulesets governance rule.
 type RulesetsSettings struct {
 	Rulesets []RulesetConfig `yaml:"rulesets"`
@@ -193,10 +189,6 @@ func (r *RepoRulesets) Apply(ctx context.Context, repo *gh.Repository) (*Result,
 	return result, nil
 }
 
-// ---------------------------------------------------------------------------
-// Build helpers — convert config to go-github RepositoryRuleset
-// ---------------------------------------------------------------------------
-
 func buildRuleset(cfg RulesetConfig) gogithub.RepositoryRuleset {
 	target := gogithub.RulesetTarget(cfg.Target)
 	rs := gogithub.RepositoryRuleset{
@@ -315,10 +307,6 @@ func buildRules(cfg RulesConfig) *gogithub.RepositoryRulesetRules {
 
 	return rules
 }
-
-// ---------------------------------------------------------------------------
-// Evaluate helpers — compare actual ruleset against desired config
-// ---------------------------------------------------------------------------
 
 func checkRuleset(name string, actual *gogithub.RepositoryRuleset, desired RulesetConfig) []Violation {
 	var violations []Violation

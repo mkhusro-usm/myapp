@@ -40,7 +40,7 @@ func (c *Client) GetRepository(ctx context.Context, name string) (*Repository, e
 		"name":  githubv4.String(name),
 	}
 
-	if err := c.GraphQL.Query(ctx, &q, variables); err != nil {
+	if err := c.graphQL.Query(ctx, &q, variables); err != nil {
 		return nil, fmt.Errorf("querying repository %s: %w", name, err)
 	}
 
@@ -83,7 +83,7 @@ func (c *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
 
 	var repos []Repository
 	for {
-		if err := c.GraphQL.Query(ctx, &q, variables); err != nil {
+		if err := c.graphQL.Query(ctx, &q, variables); err != nil {
 			return nil, fmt.Errorf("querying repositories: %w", err)
 		}
 		for _, n := range q.Viewer.Repositories.Nodes {

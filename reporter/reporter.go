@@ -1,3 +1,7 @@
+// Package reporter provides types and functions for generating governance run reports.
+//
+// Reports are structured JSON documents containing rule evaluation results,
+// summaries, and metadata about the run.
 package reporter
 
 import (
@@ -11,7 +15,9 @@ import (
 	"github.com/mkhusro-usm/myapp/rule"
 )
 
-// Report is the structured output of a governance run.
+// Report represents the structured output of a governance run.
+// It includes timing information, organization details, a summary of results,
+// and detailed results for both org-scoped and repo-scoped rules.
 type Report struct {
 	Timestamp    time.Time      `json:"timestamp"`
 	Organization string         `json:"organization"`
@@ -21,7 +27,8 @@ type Report struct {
 	RepoResults  []*rule.Result `json:"repo_results,omitempty"`
 }
 
-// Summary holds aggregate counts for the report.
+// Summary holds aggregate counts for the entire governance run.
+// These values are derived from individual rule results.
 type Summary struct {
 	Repositories        int      `json:"repositories"`
 	TotalEvaluations    int      `json:"total_evaluations"`
@@ -32,6 +39,7 @@ type Summary struct {
 }
 
 // BuildReport constructs a Report from raw results and metadata.
+// It computes summary statistics by aggregating over all results.
 func BuildReport(org string, mode rule.Mode, orgResults, repoResults []*rule.Result) *Report {
 	var s Summary
 	repos := make(map[string]struct{})
@@ -83,6 +91,7 @@ func (r *Report) Write(outputPath string) error {
 	return writeJSON(f, r)
 }
 
+// writeJSON writes the report as indented JSON to the given writer.
 func writeJSON(w io.Writer, report *Report) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

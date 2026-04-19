@@ -1,3 +1,16 @@
+// Package rule provides governance rules and core types for evaluating
+// and applying repository policies.
+//
+// Governance rules implement RepoRule or OrgRule interfaces to evaluate compliance
+// and optionally apply fixes via pull requests.
+//
+// Key files:
+//   - rule.go: Core types (Result, Violation) and interfaces (RepoRule, OrgRule)
+//   - registry.go: Registry for managing enabled rules
+//   - mode.go: Run modes (evaluate, apply)
+//   - codeowners.go: CODEOWNERS file enforcement
+//   - rulesets.go: GitHub Rulesets enforcement
+//   - repo_settings.go: Repository settings enforcement
 package rule
 
 import (

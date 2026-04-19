@@ -2,7 +2,9 @@ package rule
 
 import "fmt"
 
-// Mode represents the run mode of the application.
+// Mode represents the run mode of the governance application.
+// ModeEvaluate checks compliance without making changes.
+// ModeApply creates pull requests to fix violations.
 type Mode string
 
 const (

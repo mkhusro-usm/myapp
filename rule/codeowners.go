@@ -13,7 +13,6 @@ import (
 const (
 	codeownersPath         = ".github/CODEOWNERS"
 	codeownersBranchPrefix = "governance/codeowners"
-	codeownersCommitMsg    = "chore: update CODEOWNERS per governance policy"
 )
 
 // CodeownersEntry represents a single required CODEOWNERS line.
@@ -22,6 +21,7 @@ type CodeownersEntry struct {
 	Owners  []string `yaml:"owners"`
 }
 
+// line returns the CODEOWNERS file entry in standard format.
 func (e CodeownersEntry) line() string {
 	return e.Pattern + " " + strings.Join(e.Owners, " ")
 }
@@ -134,12 +134,13 @@ func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, 
 
 	prURL, err := co.client.CreateFileChangePR(
 		ctx, repo.Name, defaultBranch(repo),
-		codeownersPath,
 		codeownersBranchPrefix,
-		codeownersCommitMsg,
-		codeownersCommitMsg,
+		"chore: update CODEOWNERS per governance policy",
 		"This PR was automatically created by the governance tool to ensure CODEOWNERS compliance.",
-		[]byte(desiredContent),
+		[]gh.FileChange{{
+			Path:    codeownersPath,
+			Content: []byte(desiredContent),
+		}},
 	)
 	if err != nil {
 		return nil, err

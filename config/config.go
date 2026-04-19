@@ -1,3 +1,7 @@
+// Package config provides types and functions for loading governance configuration.
+//
+// Configuration is loaded from YAML files, with support for per-repo overrides
+// that allow certain rules to be customized for specific repositories.
 package config
 
 import (
@@ -9,7 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the top-level governance configuration loaded from YAML.
+// Config represents the top-level governance configuration loaded from YAML.
+// It defines the organization, GitHub App credentials, and which rules are enabled.
 type Config struct {
 	GitHubApp   GitHubAppConfig       `yaml:"github-app"`
 	Org         string                `yaml:"org"`
@@ -24,23 +29,29 @@ type GitHubAppConfig struct {
 	PrivateKeyPath string `yaml:"private-key-path"`
 }
 
-// RuleConfig represents a single rule's toggle, scope, and settings from the config file.
+// RuleConfig represents the configuration for a single governance rule.
+// Scope specifies whether the rule operates at the repository or organization level.
+// Settings contains rule-specific configuration parsed by each rule.
 type RuleConfig struct {
 	Enabled  bool           `yaml:"enabled"`
 	Scope    string         `yaml:"scope"` // "repo" or "org"
 	Settings map[string]any `yaml:"settings"`
 }
 
-// RepoOverride represents the per-repo override configuration loaded from overrides/<repo>.yaml.
+// RepoOverride represents per-repo override configuration loaded from overrides/<repo>.yaml.
+// It allows certain rules to be customized for specific repositories on top of global rules.
 type RepoOverride struct {
 	Rules map[string]RepoOverrideRule `yaml:"rules"`
 }
 
-// RepoOverrideRule holds the override settings for a single rule within a repo override file.
+// RepoOverrideRule holds override settings for a single rule within a repo override file.
+// The settings structure must match what the corresponding rule expects.
 type RepoOverrideRule struct {
 	Settings map[string]any `yaml:"settings"`
 }
 
+// Load reads and parses the governance configuration from the given YAML file.
+// Returns an error if the file cannot be read or contains invalid YAML.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -55,10 +66,10 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// LoadOverrides reads all YAML files from the given directory and returns a map
-// of repo name to its override configuration. The repo name is derived from the
-// filename (e.g., "overrides/payment-service.yaml" → "payment-service").
-// Returns an empty map (not an error) if the directory does not exist.
+// LoadOverrides reads all YAML override files from the given directory.
+// It returns a map mapping repository names to their override configuration.
+// Repository names are derived from filenames (e.g., "payment-service.yaml" → "payment-service").
+// Returns an empty map if the directory does not exist.
 func LoadOverrides(dir string) (map[string]RepoOverride, error) {
 	overrides := make(map[string]RepoOverride)
 

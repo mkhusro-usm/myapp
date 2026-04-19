@@ -25,7 +25,7 @@ type RepoSettings struct {
 
 // GetRepoSettings fetches the pull request and merge settings for a repository.
 func (c *Client) GetRepoSettings(ctx context.Context, repoName string) (*RepoSettings, error) {
-	repo, _, err := c.REST.Repositories.Get(ctx, c.org, repoName)
+	repo, _, err := c.restClient.Repositories.Get(ctx, c.org, repoName)
 	if err != nil {
 		return nil, fmt.Errorf("getting repository %s: %w", repoName, err)
 	}
@@ -47,7 +47,7 @@ func (c *Client) GetRepoSettings(ctx context.Context, repoName string) (*RepoSet
 // UpdateRepoSettings applies the desired pull request and merge settings to a repository.
 // Only non-nil fields are sent to the API; nil fields leave the current value unchanged.
 func (c *Client) UpdateRepoSettings(ctx context.Context, repoName string, s *RepoSettings) error {
-	_, _, err := c.REST.Repositories.Edit(ctx, c.org, repoName, &gogithub.Repository{
+	_, _, err := c.restClient.Repositories.Edit(ctx, c.org, repoName, &gogithub.Repository{
 		AllowMergeCommit:         s.AllowMergeCommit,
 		AllowSquashMerge:         s.AllowSquashMerge,
 		AllowRebaseMerge:         s.AllowRebaseMerge,

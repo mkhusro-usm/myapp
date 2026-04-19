@@ -1,3 +1,7 @@
+// Package main is the entry point for the governance CLI tool.
+//
+// It loads configuration, parses command-line flags, initializes the app,
+// and executes governance rules with proper signal handling and timeouts.
 package main
 
 import (
@@ -15,8 +19,8 @@ import (
 )
 
 const (
-	defaultConfigPath   = "config.yaml"
-	defaultOverridesDir = "overrides"
+	defaultConfigPath   = "config.yaml" // default path to config file
+	defaultOverridesDir = "overrides"   // default directory for per-repo overrides
 )
 
 func main() {
@@ -25,6 +29,8 @@ func main() {
 	}
 }
 
+// run parses flags, loads configuration, and executes the governance app.
+// It handles OS signals for graceful shutdown and enforces a timeout.
 func run() error {
 	configPath := flag.String("config", defaultConfigPath, "path to config file")
 	repo := flag.String("repo", "", "target a single repository (e.g. my-repo)")
