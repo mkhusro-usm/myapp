@@ -72,8 +72,8 @@ func (c *Client) getOrCreateBranch(ctx context.Context, repoName, branchPrefix, 
 		return baseSHA, nil
 	}
 
-	// If error is "Reference already exists", fetch and return existing SHA.
-	if resp, ok := err.(*gogithub.ErrorResponse); ok && resp.Response.StatusCode == http.StatusUnprocessableEntity {
+	// If error is "Reference already exists" (409 Conflict), fetch and return existing SHA.
+	if resp, ok := err.(*gogithub.ErrorResponse); ok && resp.Response.StatusCode == http.StatusConflict {
 		ref, _, err := c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+branchPrefix)
 		if err != nil {
 			return "", fmt.Errorf("getting existing branch %s: %w", branchPrefix, err)
