@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +31,16 @@ type RuleConfig struct {
 	Settings map[string]any `yaml:"settings"`
 }
 
+// RepoOverride represents the per-repo override configuration loaded from overrides/<repo>.yaml.
+type RepoOverride struct {
+	Rules map[string]RepoOverrideRule `yaml:"rules"`
+}
+
+// RepoOverrideRule holds the override settings for a single rule within a repo override file.
+type RepoOverrideRule struct {
+	Settings map[string]any `yaml:"settings"`
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -41,4 +53,45 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// LoadOverrides reads all YAML files from the given directory and returns a map
+// of repo name to its override configuration. The repo name is derived from the
+// filename (e.g., "overrides/payment-service.yaml" → "payment-service").
+// Returns an empty map (not an error) if the directory does not exist.
+func LoadOverrides(dir string) (map[string]RepoOverride, error) {
+	overrides := make(map[string]RepoOverride)
+
+	info, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return overrides, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("checking overrides directory: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("overrides path %q is not a directory", dir)
+	}
+
+	files, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	if err != nil {
+		return nil, fmt.Errorf("globbing overrides directory: %w", err)
+	}
+
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("reading override file %s: %w", file, err)
+		}
+
+		var override RepoOverride
+		if err := yaml.Unmarshal(data, &override); err != nil {
+			return nil, fmt.Errorf("parsing override file %s: %w", file, err)
+		}
+
+		repoName := strings.TrimSuffix(filepath.Base(file), ".yaml")
+		overrides[repoName] = override
+	}
+
+	return overrides, nil
 }

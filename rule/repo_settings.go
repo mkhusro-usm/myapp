@@ -54,7 +54,7 @@ func (rs *RepoSettings) Evaluate(ctx context.Context, repo *gh.Repository) (*Res
 // Only settings that are explicitly configured are applied.
 func (rs *RepoSettings) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
 	log.Printf("[%s] applying repository PR/merge settings", repo.FullName())
-	if err := rs.client.UpdateRepoSettings(ctx, repo.Name, rs.desiredInput()); err != nil {
+	if err := rs.client.UpdateRepoSettings(ctx, repo.Name, rs.desired()); err != nil {
 		return nil, fmt.Errorf("applying repo settings for %s: %w", repo.FullName(), err)
 	}
 
@@ -64,8 +64,8 @@ func (rs *RepoSettings) Apply(ctx context.Context, repo *gh.Repository) (*Result
 	return r, nil
 }
 
-func (rs *RepoSettings) desiredInput() *gh.RepoSettingsInput {
-	return &gh.RepoSettingsInput{
+func (rs *RepoSettings) desired() *gh.RepoSettings {
+	return &gh.RepoSettings{
 		AllowMergeCommit:         rs.settings.AllowMergeCommit,
 		AllowSquashMerge:         rs.settings.AllowSquashMerge,
 		AllowRebaseMerge:         rs.settings.AllowRebaseMerge,
@@ -82,22 +82,22 @@ func (rs *RepoSettings) desiredInput() *gh.RepoSettingsInput {
 func (rs *RepoSettings) check(current *gh.RepoSettings) []Violation {
 	var violations []Violation
 
-	checkBool := func(field string, expected *bool, actual bool) {
-		if expected != nil && *expected != actual {
+	checkBool := func(field string, expected, actual *bool) {
+		if expected != nil && actual != nil && *expected != *actual {
 			violations = append(violations, Violation{
 				Field:    field,
 				Expected: fmt.Sprintf("%t", *expected),
-				Actual:   fmt.Sprintf("%t", actual),
+				Actual:   fmt.Sprintf("%t", *actual),
 			})
 		}
 	}
 
-	checkString := func(field string, expected *string, actual string) {
-		if expected != nil && *expected != actual {
+	checkString := func(field string, expected, actual *string) {
+		if expected != nil && actual != nil && *expected != *actual {
 			violations = append(violations, Violation{
 				Field:    field,
 				Expected: *expected,
-				Actual:   actual,
+				Actual:   *actual,
 			})
 		}
 	}

@@ -1,8 +1,8 @@
 name: Governance Check
 
 on:
-  schedule:
-    - cron: "0 8 * * *" # Daily at 8am UTC
+  # schedule:
+  #   - cron: "0 8 * * *" # Daily at 8am UTC
   workflow_dispatch:
     inputs:
       mode:

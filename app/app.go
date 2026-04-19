@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,10 +16,22 @@ import (
 	"github.com/mkhusro-usm/myapp/rule"
 )
 
-const (
-	defaultConfigPath = "config.yaml"
-	envPrivateKey     = "GH_APP_PRIVATE_KEY"
-)
+const envPrivateKey = "GH_APP_PRIVATE_KEY"
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+// App is the central struct holding all injected dependencies.
+type App struct {
+	config     *config.Config
+	client     *gh.Client
+	transport  *ghinstallation.Transport
+	registry   *rule.Registry
+	mode       rule.Mode
+	targetRepo string
+	outputPath string
+}
 
 // Option is a functional option for configuring the App.
 type Option func(*App)
@@ -47,57 +58,15 @@ func WithOutput(path string) Option {
 	}
 }
 
-// App is the central struct holding all injected dependencies.
-type App struct {
-	config     *config.Config
-	client     *gh.Client
-	transport  *ghinstallation.Transport
-	registry   *rule.Registry
-	mode       rule.Mode
-	targetRepo string
-	outputPath string
-}
+// ---------------------------------------------------------------------------
+// Public methods
+// ---------------------------------------------------------------------------
 
-// Run is the top-level entry point. It parses flags, loads config, and executes the app.
-func Run(ctx context.Context) error {
-	configPath := flag.String("config", defaultConfigPath, "path to config file")
-	repo := flag.String("repo", "", "target a single repository (e.g. my-repo)")
-	mode := flag.String("mode", "evaluate", "run mode: evaluate or apply")
-	output := flag.String("output", "", "path to write JSON report (e.g. reports/compliance.json)")
-	flag.Parse()
-
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	m, err := rule.ParseMode(*mode)
-	if err != nil {
-		return err
-	}
-
-	opts := []Option{
-		WithMode(m),
-	}
-
-	if *repo != "" {
-		opts = append(opts, WithTargetRepo(*repo))
-	}
-
-	if *output != "" {
-		opts = append(opts, WithOutput(*output))
-	}
-
-	application, err := newApp(cfg, opts...)
-	if err != nil {
-		return fmt.Errorf("initializing app: %w", err)
-	}
-
-	return application.run(ctx)
-}
-
-// newApp constructs the App, wiring up all dependencies from config.
-func newApp(cfg *config.Config, opts ...Option) (*App, error) {
+// New constructs a fully initialized App from the given config, overrides, and options.
+// It sets up the GitHub App client, registers all enabled rules, and returns an App
+// ready to execute via Run. Per-repo overrides are passed through to individual rules
+// that support them — the App itself does not interpret overrides.
+func New(cfg *config.Config, overrides map[string]config.RepoOverride, opts ...Option) (*App, error) {
 	key, err := loadPrivateKey(cfg.GitHubApp.PrivateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading private key: %w", err)
@@ -118,7 +87,7 @@ func newApp(cfg *config.Config, opts ...Option) (*App, error) {
 
 	log.Printf("authenticated as GitHub App (app-id: %d, installation-id: %d)", cfg.GitHubApp.AppID, cfg.GitHubApp.InstallationID)
 
-	app := &App{
+	a := &App{
 		config:    cfg,
 		client:    client,
 		transport: transport,
@@ -127,60 +96,18 @@ func newApp(cfg *config.Config, opts ...Option) (*App, error) {
 	}
 
 	for _, opt := range opts {
-		opt(app)
+		opt(a)
 	}
 
-	if err := app.registerRules(); err != nil {
+	if err := a.registerRules(overrides); err != nil {
 		return nil, fmt.Errorf("registering rules: %w", err)
 	}
 
-	return app, nil
+	return a, nil
 }
 
-func (a *App) registerRules() error {
-	for name, rc := range a.config.Rules {
-		if !rc.Enabled {
-			log.Printf("rule %q is disabled, skipping", name)
-			continue
-		}
-		if rc.Scope == "" {
-			return fmt.Errorf("rule %q is missing required 'scope' field (repo or org)", name)
-		}
-		log.Printf("registering rule: %s (scope: %s)", name, rc.Scope)
-		switch name {
-		case "org-rulesets", "repo-rulesets":
-			settings, err := rule.ParseSettings[rule.RulesetsSettings](rc.Settings)
-			if err != nil {
-				return fmt.Errorf("parsing rulesets settings: %w", err)
-			}
-			switch rc.Scope {
-			case "org":
-				a.registry.RegisterOrgRule(rule.NewOrgRulesets(a.client, settings))
-			case "repo":
-				a.registry.RegisterRepoRule(rule.NewRepoRulesets(a.client, settings))
-			}
-		case "codeowners":
-			settings, err := rule.ParseSettings[rule.CodeownersSettings](rc.Settings)
-			if err != nil {
-				return fmt.Errorf("parsing codeowners settings: %w", err)
-			}
-			a.registry.RegisterRepoRule(rule.NewCodeowners(a.client, settings))
-		case "repo-settings":
-			settings, err := rule.ParseSettings[rule.RepoSettingsConfig](rc.Settings)
-			if err != nil {
-				return fmt.Errorf("parsing repo-settings settings: %w", err)
-			}
-			a.registry.RegisterRepoRule(rule.NewRepoSettings(a.client, settings))
-		default:
-			log.Printf("warning: unknown rule %q, skipping", name)
-		}
-	}
-
-	return nil
-}
-
-// run executes governance rules in two phases: org-scoped rules first, then repo-scoped rules.
-func (a *App) run(ctx context.Context) error {
+// Run executes governance rules in two phases: org-scoped rules first, then repo-scoped rules.
+func (a *App) Run(ctx context.Context) error {
 	repoRules := a.registry.RepoRules()
 	orgRules := a.registry.OrgRules()
 
@@ -252,6 +179,66 @@ func (a *App) run(ctx context.Context) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Private helpers — called by New
+// ---------------------------------------------------------------------------
+
+func loadPrivateKey(privateKeyPath string) ([]byte, error) {
+	if key := os.Getenv(envPrivateKey); key != "" {
+		return []byte(key), nil
+	}
+
+	if privateKeyPath == "" {
+		return nil, fmt.Errorf("no private key: set %s env var or private-key-path in config", envPrivateKey)
+	}
+
+	return os.ReadFile(privateKeyPath)
+}
+
+// registerRules creates and registers all enabled rules. Per-repo overrides are
+// passed to each rule's constructor — it is the rule's responsibility to extract,
+// parse, and validate its own overrides.
+func (a *App) registerRules(overrides map[string]config.RepoOverride) error {
+	for name, rc := range a.config.Rules {
+		if !rc.Enabled {
+			log.Printf("rule %q is disabled, skipping", name)
+			continue
+		}
+		if rc.Scope == "" {
+			return fmt.Errorf("rule %q is missing required 'scope' field (repo or org)", name)
+		}
+		log.Printf("registering rule: %s (scope: %s)", name, rc.Scope)
+		switch name {
+		case "repo-rulesets":
+			settings, err := rule.ParseSettings[rule.RulesetsSettings](rc.Settings)
+			if err != nil {
+				return fmt.Errorf("parsing rulesets settings: %w", err)
+			}
+			a.registry.RegisterRepoRule(rule.NewRepoRulesets(a.client, settings))
+		case "codeowners":
+			settings, err := rule.ParseSettings[rule.CodeownersSettings](rc.Settings)
+			if err != nil {
+				return fmt.Errorf("parsing codeowners settings: %w", err)
+			}
+			a.registry.RegisterRepoRule(rule.NewCodeowners(a.client, settings, overrides))
+		case "repo-settings":
+			settings, err := rule.ParseSettings[rule.RepoSettingsConfig](rc.Settings)
+			if err != nil {
+				return fmt.Errorf("parsing repo-settings settings: %w", err)
+			}
+			a.registry.RegisterRepoRule(rule.NewRepoSettings(a.client, settings))
+		default:
+			log.Printf("warning: unknown rule %q, skipping", name)
+		}
+	}
+
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers — called by Run
+// ---------------------------------------------------------------------------
+
 func (a *App) processOrgRules(ctx context.Context, rules map[string]rule.OrgRule) []*rule.Result {
 	var results []*rule.Result
 	for _, r := range rules {
@@ -276,9 +263,24 @@ func (a *App) processOrgRules(ctx context.Context, rules map[string]rule.OrgRule
 	return results
 }
 
+func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
+	if a.targetRepo != "" {
+		log.Printf("targeting single repository: %s", a.targetRepo)
+		repo, err := a.client.GetRepository(ctx, a.targetRepo)
+		if err != nil {
+			return nil, err
+		}
+		return []gh.Repository{*repo}, nil
+	}
+	log.Printf("listing all repositories accessible to the GitHub App")
+
+	return a.client.ListRepositories(ctx)
+}
+
 func (a *App) processRepo(ctx context.Context, repo *gh.Repository, rules map[string]rule.RepoRule) []*rule.Result {
 	log.Printf("[%s] processing repository (%d rules)", repo.FullName(), len(rules))
 	var results []*rule.Result
+
 	for _, r := range rules {
 		log.Printf("[%s] running %s (%s)", repo.FullName(), r.Name(), a.mode)
 		var result *rule.Result
@@ -310,33 +312,4 @@ func (a *App) logResult(scope, ruleName string, result *rule.Result) {
 	if result.Applied {
 		log.Printf("[%s] %s: applied successfully", scope, ruleName)
 	}
-}
-
-func (a *App) fetchRepos(ctx context.Context) ([]gh.Repository, error) {
-	if a.targetRepo != "" {
-		log.Printf("targeting single repository: %s", a.targetRepo)
-		repo, err := a.client.GetRepository(ctx, a.targetRepo)
-		if err != nil {
-			return nil, err
-		}
-		return []gh.Repository{*repo}, nil
-	}
-	log.Printf("listing all repositories accessible to the GitHub App")
-
-	return a.client.ListRepositories(ctx)
-}
-
-func loadPrivateKey(privateKeyPath string) (
-	[]byte,
-	error,
-) {
-	if key := os.Getenv(envPrivateKey); key != "" {
-		return []byte(key), nil
-	}
-
-	if privateKeyPath == "" {
-		return nil, fmt.Errorf("no private key: set %s env var or private-key-path in config", envPrivateKey)
-	}
-
-	return os.ReadFile(privateKeyPath)
 }

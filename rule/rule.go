@@ -18,19 +18,6 @@ type Result struct {
 	PullRequestURL string      `json:"pull_request_url,omitempty"`
 }
 
-// NewResult constructs a Result, automatically setting ViolationCount and Compliant.
-func NewResult(ruleName, repository string, violations []Violation) *Result {
-	violationCount := len(violations)
-
-	return &Result{
-		RuleName:       ruleName,
-		Repository:     repository,
-		Compliant:      violationCount == 0,
-		ViolationCount: violationCount,
-		Violations:     violations,
-	}
-}
-
 // Violation describes a specific policy drift found during evaluation.
 type Violation struct {
 	Field    string `json:"field"`
@@ -53,13 +40,17 @@ type OrgRule interface {
 	Apply(ctx context.Context) (*Result, error)
 }
 
-const defaultBranchFallback = "main"
+// NewResult constructs a Result, automatically setting ViolationCount and Compliant.
+func NewResult(ruleName, repository string, violations []Violation) *Result {
+	violationCount := len(violations)
 
-func defaultBranch(repo *gh.Repository) string {
-	if repo.DefaultBranch != "" {
-		return repo.DefaultBranch
+	return &Result{
+		RuleName:       ruleName,
+		Repository:     repository,
+		Compliant:      violationCount == 0,
+		ViolationCount: violationCount,
+		Violations:     violations,
 	}
-	return defaultBranchFallback
 }
 
 // ParseSettings converts a generic settings map into a typed struct via YAML round-trip.
@@ -74,4 +65,13 @@ func ParseSettings[T any](raw map[string]any) (T, error) {
 	err = yaml.Unmarshal(bytes, &settings)
 
 	return settings, err
+}
+
+const defaultBranchFallback = "main"
+
+func defaultBranch(repo *gh.Repository) string {
+	if repo.DefaultBranch != "" {
+		return repo.DefaultBranch
+	}
+	return defaultBranchFallback
 }

@@ -8,17 +8,19 @@ import (
 )
 
 // RepoSettings represents the pull request and merge settings for a repository.
+// Pointer fields allow distinguishing between "not set" (nil) and an explicit value,
+// which is needed for partial updates via the GitHub API.
 type RepoSettings struct {
-	AllowMergeCommit         bool
-	AllowSquashMerge         bool
-	AllowRebaseMerge         bool
-	AllowAutoMerge           bool
-	DeleteBranchOnMerge      bool
-	AllowUpdateBranch        bool
-	SquashMergeCommitTitle   string // "PR_TITLE" or "COMMIT_OR_PR_TITLE"
-	SquashMergeCommitMessage string // "PR_BODY", "COMMIT_MESSAGES", or "BLANK"
-	MergeCommitTitle         string // "PR_TITLE" or "MERGE_MESSAGE"
-	MergeCommitMessage       string // "PR_BODY", "PR_TITLE", or "BLANK"
+	AllowMergeCommit         *bool   `json:"allow_merge_commit,omitempty"`
+	AllowSquashMerge         *bool   `json:"allow_squash_merge,omitempty"`
+	AllowRebaseMerge         *bool   `json:"allow_rebase_merge,omitempty"`
+	AllowAutoMerge           *bool   `json:"allow_auto_merge,omitempty"`
+	DeleteBranchOnMerge      *bool   `json:"delete_branch_on_merge,omitempty"`
+	AllowUpdateBranch        *bool   `json:"allow_update_branch,omitempty"`
+	SquashMergeCommitTitle   *string `json:"squash_merge_commit_title,omitempty"`
+	SquashMergeCommitMessage *string `json:"squash_merge_commit_message,omitempty"`
+	MergeCommitTitle         *string `json:"merge_commit_title,omitempty"`
+	MergeCommitMessage       *string `json:"merge_commit_message,omitempty"`
 }
 
 // GetRepoSettings fetches the pull request and merge settings for a repository.
@@ -29,37 +31,22 @@ func (c *Client) GetRepoSettings(ctx context.Context, repoName string) (*RepoSet
 	}
 
 	return &RepoSettings{
-		AllowMergeCommit:         repo.GetAllowMergeCommit(),
-		AllowSquashMerge:         repo.GetAllowSquashMerge(),
-		AllowRebaseMerge:         repo.GetAllowRebaseMerge(),
-		AllowAutoMerge:           repo.GetAllowAutoMerge(),
-		DeleteBranchOnMerge:      repo.GetDeleteBranchOnMerge(),
-		AllowUpdateBranch:        repo.GetAllowUpdateBranch(),
-		SquashMergeCommitTitle:   repo.GetSquashMergeCommitTitle(),
-		SquashMergeCommitMessage: repo.GetSquashMergeCommitMessage(),
-		MergeCommitTitle:         repo.GetMergeCommitTitle(),
-		MergeCommitMessage:       repo.GetMergeCommitMessage(),
+		AllowMergeCommit:         repo.AllowMergeCommit,
+		AllowSquashMerge:         repo.AllowSquashMerge,
+		AllowRebaseMerge:         repo.AllowRebaseMerge,
+		AllowAutoMerge:           repo.AllowAutoMerge,
+		DeleteBranchOnMerge:      repo.DeleteBranchOnMerge,
+		AllowUpdateBranch:        repo.AllowUpdateBranch,
+		SquashMergeCommitTitle:   repo.SquashMergeCommitTitle,
+		SquashMergeCommitMessage: repo.SquashMergeCommitMessage,
+		MergeCommitTitle:         repo.MergeCommitTitle,
+		MergeCommitMessage:       repo.MergeCommitMessage,
 	}, nil
 }
 
-// RepoSettingsInput represents the desired state for updates.
-// Nil fields are not sent to the API and leave the current value unchanged.
-type RepoSettingsInput struct {
-	AllowMergeCommit         *bool
-	AllowSquashMerge         *bool
-	AllowRebaseMerge         *bool
-	AllowAutoMerge           *bool
-	DeleteBranchOnMerge      *bool
-	AllowUpdateBranch        *bool
-	SquashMergeCommitTitle   *string
-	SquashMergeCommitMessage *string
-	MergeCommitTitle         *string
-	MergeCommitMessage       *string
-}
-
 // UpdateRepoSettings applies the desired pull request and merge settings to a repository.
-// Only non-nil fields in the input are applied; nil fields are left unchanged.
-func (c *Client) UpdateRepoSettings(ctx context.Context, repoName string, s *RepoSettingsInput) error {
+// Only non-nil fields are sent to the API; nil fields leave the current value unchanged.
+func (c *Client) UpdateRepoSettings(ctx context.Context, repoName string, s *RepoSettings) error {
 	_, _, err := c.REST.Repositories.Edit(ctx, c.org, repoName, &gogithub.Repository{
 		AllowMergeCommit:         s.AllowMergeCommit,
 		AllowSquashMerge:         s.AllowSquashMerge,

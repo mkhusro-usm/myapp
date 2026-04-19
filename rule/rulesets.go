@@ -60,7 +60,7 @@ type RepoConditionConfig struct {
 // Pointer fields are optional — nil means the rule is not managed by this config.
 type RulesConfig struct {
 	// Parameterized rules
-	PullRequest          *PullRequestRuleConfig         `yaml:"pull-request"`
+	PullRequest          *PullRequestRuleConfig          `yaml:"pull-request"`
 	RequiredStatusChecks *RequiredStatusChecksRuleConfig `yaml:"required-status-checks"`
 	RequiredDeployments  *RequiredDeploymentsRuleConfig  `yaml:"required-deployments"`
 	CodeScanning         *CodeScanningRuleConfig         `yaml:"code-scanning"`
@@ -119,78 +119,6 @@ type CodeScanningToolConfig struct {
 type CopilotCodeReviewRuleConfig struct {
 	ReviewOnPush            bool `yaml:"review-on-push"`
 	ReviewDraftPullRequests bool `yaml:"review-draft-pull-requests"`
-}
-
-// ---------------------------------------------------------------------------
-// OrgRulesets — implements OrgRule
-// ---------------------------------------------------------------------------
-
-// OrgRulesets enforces rulesets at the organization level.
-type OrgRulesets struct {
-	client   *gh.Client
-	settings RulesetsSettings
-}
-
-// NewOrgRulesets creates an OrgRulesets rule with the given settings.
-func NewOrgRulesets(client *gh.Client, settings RulesetsSettings) *OrgRulesets {
-	return &OrgRulesets{client: client, settings: settings}
-}
-
-func (r *OrgRulesets) Name() string { return "org-rulesets" }
-
-func (r *OrgRulesets) Evaluate(ctx context.Context) (*Result, error) {
-	log.Printf("[org] evaluating organization rulesets")
-	var allViolations []Violation
-
-	for _, desired := range r.settings.Rulesets {
-		actual, err := r.client.GetOrgRulesetByName(ctx, desired.Name)
-		if err != nil {
-			return nil, fmt.Errorf("fetching org ruleset %q: %w", desired.Name, err)
-		}
-
-		if actual == nil {
-			allViolations = append(allViolations, Violation{
-				Field:    desired.Name,
-				Expected: "exists",
-				Actual:   "not found",
-				Message:  fmt.Sprintf("org ruleset %q does not exist", desired.Name),
-			})
-			continue
-		}
-
-		allViolations = append(allViolations, checkRuleset(desired.Name, actual, desired)...)
-	}
-
-	return NewResult(r.Name(), r.client.Org(), allViolations), nil
-}
-
-func (r *OrgRulesets) Apply(ctx context.Context) (*Result, error) {
-	log.Printf("[org] applying organization rulesets")
-
-	for _, desired := range r.settings.Rulesets {
-		actual, err := r.client.GetOrgRulesetByName(ctx, desired.Name)
-		if err != nil {
-			return nil, fmt.Errorf("fetching org ruleset %q: %w", desired.Name, err)
-		}
-
-		rs := buildRuleset(desired)
-
-		if actual == nil {
-			log.Printf("[org] creating ruleset %q", desired.Name)
-			_, err = r.client.CreateOrgRuleset(ctx, rs)
-		} else {
-			log.Printf("[org] updating ruleset %q", desired.Name)
-			_, err = r.client.UpdateOrgRuleset(ctx, actual.GetID(), rs)
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("applying org ruleset %q: %w", desired.Name, err)
-		}
-	}
-
-	result := NewResult(r.Name(), r.client.Org(), nil)
-	result.Applied = true
-	return result, nil
 }
 
 // ---------------------------------------------------------------------------
