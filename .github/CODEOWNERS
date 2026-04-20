@@ -3,3 +3,5 @@
 
 .github/CODEOWNERS @mkhusro-usm
 .github/workflows/** @mkhusro-usm
+config.yaml @mkhusro-usm
+rule/** @mkhusro-usm
