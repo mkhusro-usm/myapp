@@ -1,0 +1,5 @@
+# CODEOWNERS — managed by governance tool
+# Do not edit manually; changes will be overwritten.
+
+.github/CODEOWNERS @mkhusro-usm
+.github/workflows/** @mkhusro-usm
