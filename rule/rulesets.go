@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 
 	gogithub "github.com/google/go-github/v84/github"
@@ -17,10 +16,12 @@ type RulesetsSettings struct {
 }
 
 // RulesetConfig describes a single desired ruleset.
+// The Name field supports a {default_branch} placeholder that is resolved
+// at evaluate/apply time using each repository's actual default branch.
 type RulesetConfig struct {
 	Name         string              `yaml:"name"`
 	Target       string              `yaml:"target"`      // "branch" or "tag"
-	Enforcement  string              `yaml:"enforcement"` // "active", "evaluate", "disabled"
+	Enforcement  string              `yaml:"enforcement"` // "active", "disabled"
 	BypassActors []BypassActorConfig `yaml:"bypass-actors"`
 	Conditions   *ConditionsConfig   `yaml:"conditions"`
 	Rules        RulesConfig         `yaml:"rules"`
@@ -28,7 +29,7 @@ type RulesetConfig struct {
 
 // BypassActorConfig describes an actor allowed to bypass the ruleset.
 type BypassActorConfig struct {
-	ActorID    int64  `yaml:"actor-id"`    // defaults to 1 for OrganizationAdmin
+	ActorID    int64  `yaml:"actor-id"`
 	ActorType  string `yaml:"actor-type"`  // OrganizationAdmin, RepositoryRole, Team, Integration
 	BypassMode string `yaml:"bypass-mode"` // always, pull_request
 }
@@ -55,36 +56,49 @@ type RepoConditionConfig struct {
 // RulesConfig holds the individual rules within a ruleset.
 // Pointer fields are optional — nil means the rule is not managed by this config.
 type RulesConfig struct {
-	// Parameterized rules
+	// Toggle rules (ordered per GitHub rulesets UI)
+	Creation             *bool `yaml:"creation"`
+	Update               *bool `yaml:"update"`
+	Deletion             *bool `yaml:"deletion"`
+	RequireLinearHistory *bool `yaml:"require-linear-history"`
+	RequireSignedCommits *bool `yaml:"require-signed-commits"`
+	BlockForcePushes     *bool `yaml:"block-force-pushes"`
+
+	// Parameterized rules (ordered per GitHub rulesets UI)
+	RequiredDeployments  *RequiredDeploymentsRuleConfig  `yaml:"require-deployments-to-succeed"`
 	PullRequest          *PullRequestRuleConfig          `yaml:"pull-request"`
 	RequiredStatusChecks *RequiredStatusChecksRuleConfig `yaml:"required-status-checks"`
-	RequiredDeployments  *RequiredDeploymentsRuleConfig  `yaml:"required-deployments"`
 	CodeScanning         *CodeScanningRuleConfig         `yaml:"code-scanning"`
+	CopilotCodeReview    *CopilotCodeReviewRuleConfig    `yaml:"copilot-code-review"`
+	MergeQueue           *MergeQueueRuleConfig           `yaml:"merge-queue"`
 
-	// Copilot code review
-	CopilotCodeReview *CopilotCodeReviewRuleConfig `yaml:"copilot-code-review"`
-
-	// Toggle rules: true = enforced, false = must not be present, nil = unmanaged
-	Creation              *bool `yaml:"creation"`
-	Update                *bool `yaml:"update"`
-	Deletion              *bool `yaml:"deletion"`
-	RequiredLinearHistory *bool `yaml:"required-linear-history"`
-	RequiredSignatures    *bool `yaml:"required-signatures"`
-	NonFastForward        *bool `yaml:"non-fast-forward"`
+	// Pattern rules
+	CommitMessagePattern *PatternRuleConfig `yaml:"commit-message-pattern"`
+	BranchNamePattern    *PatternRuleConfig `yaml:"branch-name-pattern"`
 }
 
 // PullRequestRuleConfig maps to the pull_request rule parameters.
 type PullRequestRuleConfig struct {
-	DismissStaleReviewsOnPush      bool `yaml:"dismiss-stale-reviews-on-push"`
-	RequireCodeOwnerReview         bool `yaml:"require-code-owner-review"`
-	RequireLastPushApproval        bool `yaml:"require-last-push-approval"`
-	RequiredApprovingReviewCount   int  `yaml:"required-approving-review-count"`
-	RequiredReviewThreadResolution bool `yaml:"required-review-thread-resolution"`
+	RequiredApprovals             int                      `yaml:"required-approvals"`
+	DismissStaleApprovalsOnPush   bool                     `yaml:"dismiss-stale-approvals-on-push"`
+	RequireCodeOwnerReview        bool                     `yaml:"require-code-owner-review"`
+	RequireMostRecentPushApproval bool                     `yaml:"require-most-recent-push-approval"`
+	RequireConversationResolution bool                     `yaml:"require-conversation-resolution"`
+	RequiredReviewers             []RequiredReviewerConfig `yaml:"required-reviewers"`
+	AllowedMergeMethods           []string                 `yaml:"allowed-merge-methods"`
+}
+
+// RequiredReviewerConfig maps to the "Require review from specific teams" setting.
+type RequiredReviewerConfig struct {
+	TeamID           int64    `yaml:"team-id"`
+	MinimumApprovals int      `yaml:"minimum-approvals"`
+	FilePatterns     []string `yaml:"file-patterns"`
 }
 
 // RequiredStatusChecksRuleConfig maps to the required_status_checks rule parameters.
 type RequiredStatusChecksRuleConfig struct {
-	StrictRequiredStatusChecksPolicy bool                `yaml:"strict-required-status-checks-policy"`
+	RequireBranchesToBeUpToDate      bool                `yaml:"require-branches-to-be-up-to-date"`
+	DoNotRequireStatusChecksOnCreate bool                `yaml:"do-not-require-status-checks-on-creation"`
 	RequiredStatusChecks             []StatusCheckConfig `yaml:"required-status-checks"`
 }
 
@@ -117,9 +131,24 @@ type CopilotCodeReviewRuleConfig struct {
 	ReviewDraftPullRequests bool `yaml:"review-draft-pull-requests"`
 }
 
-// ---------------------------------------------------------------------------
-// RepoRulesets — implements RepoRule
-// ---------------------------------------------------------------------------
+// MergeQueueRuleConfig maps to the merge_queue rule parameters.
+type MergeQueueRuleConfig struct {
+	CheckResponseTimeoutMinutes int    `yaml:"check-response-timeout-minutes"`
+	GroupingStrategy            string `yaml:"grouping-strategy"`
+	MaxEntriesToBuild           int    `yaml:"max-entries-to-build"`
+	MaxEntriesToMerge           int    `yaml:"max-entries-to-merge"`
+	MergeMethod                 string `yaml:"merge-method"`
+	MinEntriesToMerge           int    `yaml:"min-entries-to-merge"`
+	MinEntriesToMergeWaitMinutes int   `yaml:"min-entries-to-merge-wait-minutes"`
+}
+
+// PatternRuleConfig maps to pattern-based rule parameters (commit message, branch name).
+type PatternRuleConfig struct {
+	Name     string `yaml:"name"`
+	Negate   bool   `yaml:"negate"`
+	Operator string `yaml:"operator"` // starts_with, ends_with, contains, regex
+	Pattern  string `yaml:"pattern"`
+}
 
 // RepoRulesets enforces rulesets at the repository level.
 type RepoRulesets struct {
@@ -132,13 +161,17 @@ func NewRepoRulesets(client *gh.Client, settings RulesetsSettings) *RepoRulesets
 	return &RepoRulesets{client: client, settings: settings}
 }
 
+// Name returns the rule identifier.
 func (r *RepoRulesets) Name() string { return "repo-rulesets" }
 
+// Evaluate checks whether the repository's rulesets match the desired config.
 func (r *RepoRulesets) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {
 	log.Printf("[%s] evaluating repository rulesets", repo.FullName())
 	var allViolations []Violation
 
 	for _, desired := range r.settings.Rulesets {
+		desired = desired.withResolvedName(repo.DefaultBranch)
+
 		actual, err := r.client.GetRepoRulesetByName(ctx, repo.Name, desired.Name)
 		if err != nil {
 			return nil, fmt.Errorf("fetching repo ruleset %q for %s: %w", desired.Name, repo.FullName(), err)
@@ -160,10 +193,13 @@ func (r *RepoRulesets) Evaluate(ctx context.Context, repo *gh.Repository) (*Resu
 	return NewResult(r.Name(), repo.FullName(), allViolations), nil
 }
 
+// Apply creates or updates rulesets on the repository to match the desired config.
 func (r *RepoRulesets) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
 	log.Printf("[%s] applying repository rulesets", repo.FullName())
 
 	for _, desired := range r.settings.Rulesets {
+		desired = desired.withResolvedName(repo.DefaultBranch)
+
 		actual, err := r.client.GetRepoRulesetByName(ctx, repo.Name, desired.Name)
 		if err != nil {
 			return nil, fmt.Errorf("fetching repo ruleset %q for %s: %w", desired.Name, repo.FullName(), err)
@@ -189,6 +225,13 @@ func (r *RepoRulesets) Apply(ctx context.Context, repo *gh.Repository) (*Result,
 	return result, nil
 }
 
+// withResolvedName returns a copy with {default_branch} replaced by the actual branch name.
+func (rc RulesetConfig) withResolvedName(defaultBranch string) RulesetConfig {
+	rc.Name = strings.ReplaceAll(rc.Name, "{default_branch}", defaultBranch)
+	return rc
+}
+
+// buildRuleset converts a RulesetConfig into a go-github RepositoryRuleset for API calls.
 func buildRuleset(cfg RulesetConfig) gogithub.RepositoryRuleset {
 	target := gogithub.RulesetTarget(cfg.Target)
 	rs := gogithub.RepositoryRuleset{
@@ -232,9 +275,11 @@ func buildRuleset(cfg RulesetConfig) gogithub.RepositoryRuleset {
 	return rs
 }
 
+// buildRules converts the rules config into go-github rule parameters.
 func buildRules(cfg RulesConfig) *gogithub.RepositoryRulesetRules {
 	rules := &gogithub.RepositoryRulesetRules{}
 
+	// Toggle rules
 	if cfg.Creation != nil && *cfg.Creation {
 		rules.Creation = &gogithub.EmptyRuleParameters{}
 	}
@@ -244,27 +289,52 @@ func buildRules(cfg RulesConfig) *gogithub.RepositoryRulesetRules {
 	if cfg.Deletion != nil && *cfg.Deletion {
 		rules.Deletion = &gogithub.EmptyRuleParameters{}
 	}
-	if cfg.RequiredLinearHistory != nil && *cfg.RequiredLinearHistory {
+	if cfg.RequireLinearHistory != nil && *cfg.RequireLinearHistory {
 		rules.RequiredLinearHistory = &gogithub.EmptyRuleParameters{}
 	}
-	if cfg.RequiredSignatures != nil && *cfg.RequiredSignatures {
+	if cfg.RequireSignedCommits != nil && *cfg.RequireSignedCommits {
 		rules.RequiredSignatures = &gogithub.EmptyRuleParameters{}
 	}
-	if cfg.NonFastForward != nil && *cfg.NonFastForward {
+	if cfg.BlockForcePushes != nil && *cfg.BlockForcePushes {
 		rules.NonFastForward = &gogithub.EmptyRuleParameters{}
 	}
 
-	if cfg.PullRequest != nil {
-		rules.PullRequest = &gogithub.PullRequestRuleParameters{
-			DismissStaleReviewsOnPush:      cfg.PullRequest.DismissStaleReviewsOnPush,
-			RequireCodeOwnerReview:         cfg.PullRequest.RequireCodeOwnerReview,
-			RequireLastPushApproval:        cfg.PullRequest.RequireLastPushApproval,
-			RequiredApprovingReviewCount:   cfg.PullRequest.RequiredApprovingReviewCount,
-			RequiredReviewThreadResolution: cfg.PullRequest.RequiredReviewThreadResolution,
+	// Required deployments
+	if cfg.RequiredDeployments != nil {
+		rules.RequiredDeployments = &gogithub.RequiredDeploymentsRuleParameters{
+			RequiredDeploymentEnvironments: cfg.RequiredDeployments.RequiredDeploymentEnvironments,
 		}
 	}
 
-	if cfg.RequiredStatusChecks != nil {
+	// Pull request
+	if cfg.PullRequest != nil {
+		pr := &gogithub.PullRequestRuleParameters{
+			DismissStaleReviewsOnPush:      cfg.PullRequest.DismissStaleApprovalsOnPush,
+			RequireCodeOwnerReview:         cfg.PullRequest.RequireCodeOwnerReview,
+			RequireLastPushApproval:        cfg.PullRequest.RequireMostRecentPushApproval,
+			RequiredApprovingReviewCount:   cfg.PullRequest.RequiredApprovals,
+			RequiredReviewThreadResolution: cfg.PullRequest.RequireConversationResolution,
+		}
+		for _, m := range cfg.PullRequest.AllowedMergeMethods {
+			pr.AllowedMergeMethods = append(pr.AllowedMergeMethods, gogithub.PullRequestMergeMethod(m))
+		}
+		for _, r := range cfg.PullRequest.RequiredReviewers {
+			reviewerType := gogithub.RulesetReviewerTypeTeam
+			pr.RequiredReviewers = append(pr.RequiredReviewers, &gogithub.RulesetRequiredReviewer{
+				MinimumApprovals: &r.MinimumApprovals,
+				FilePatterns:     r.FilePatterns,
+				Reviewer: &gogithub.RulesetReviewer{
+					ID:   &r.TeamID,
+					Type: &reviewerType,
+				},
+			})
+		}
+		rules.PullRequest = pr
+	}
+
+	// Required status checks — GitHub API rejects this rule with an empty checks list,
+	// so only emit it when at least one check is configured.
+	if cfg.RequiredStatusChecks != nil && len(cfg.RequiredStatusChecks.RequiredStatusChecks) > 0 {
 		var checks []*gogithub.RuleStatusCheck
 		for _, sc := range cfg.RequiredStatusChecks.RequiredStatusChecks {
 			checks = append(checks, &gogithub.RuleStatusCheck{
@@ -273,17 +343,13 @@ func buildRules(cfg RulesConfig) *gogithub.RepositoryRulesetRules {
 			})
 		}
 		rules.RequiredStatusChecks = &gogithub.RequiredStatusChecksRuleParameters{
-			StrictRequiredStatusChecksPolicy: cfg.RequiredStatusChecks.StrictRequiredStatusChecksPolicy,
+			StrictRequiredStatusChecksPolicy: cfg.RequiredStatusChecks.RequireBranchesToBeUpToDate,
+			DoNotEnforceOnCreate:             &cfg.RequiredStatusChecks.DoNotRequireStatusChecksOnCreate,
 			RequiredStatusChecks:             checks,
 		}
 	}
 
-	if cfg.RequiredDeployments != nil {
-		rules.RequiredDeployments = &gogithub.RequiredDeploymentsRuleParameters{
-			RequiredDeploymentEnvironments: cfg.RequiredDeployments.RequiredDeploymentEnvironments,
-		}
-	}
-
+	// Code scanning
 	if cfg.CodeScanning != nil {
 		var tools []*gogithub.RuleCodeScanningTool
 		for _, t := range cfg.CodeScanning.CodeScanningTools {
@@ -298,6 +364,7 @@ func buildRules(cfg RulesConfig) *gogithub.RepositoryRulesetRules {
 		}
 	}
 
+	// Copilot code review
 	if cfg.CopilotCodeReview != nil {
 		rules.CopilotCodeReview = &gogithub.CopilotCodeReviewRuleParameters{
 			ReviewOnPush:            cfg.CopilotCodeReview.ReviewOnPush,
@@ -305,381 +372,36 @@ func buildRules(cfg RulesConfig) *gogithub.RepositoryRulesetRules {
 		}
 	}
 
+	// Merge queue
+	if cfg.MergeQueue != nil {
+		rules.MergeQueue = &gogithub.MergeQueueRuleParameters{
+			CheckResponseTimeoutMinutes:  cfg.MergeQueue.CheckResponseTimeoutMinutes,
+			GroupingStrategy:             gogithub.MergeGroupingStrategy(cfg.MergeQueue.GroupingStrategy),
+			MaxEntriesToBuild:            cfg.MergeQueue.MaxEntriesToBuild,
+			MaxEntriesToMerge:            cfg.MergeQueue.MaxEntriesToMerge,
+			MergeMethod:                  gogithub.MergeQueueMergeMethod(cfg.MergeQueue.MergeMethod),
+			MinEntriesToMerge:            cfg.MergeQueue.MinEntriesToMerge,
+			MinEntriesToMergeWaitMinutes: cfg.MergeQueue.MinEntriesToMergeWaitMinutes,
+		}
+	}
+
+	// Pattern rules
+	if cfg.CommitMessagePattern != nil {
+		rules.CommitMessagePattern = buildPatternRule(cfg.CommitMessagePattern)
+	}
+	if cfg.BranchNamePattern != nil {
+		rules.BranchNamePattern = buildPatternRule(cfg.BranchNamePattern)
+	}
+
 	return rules
 }
 
-func checkRuleset(name string, actual *gogithub.RepositoryRuleset, desired RulesetConfig) []Violation {
-	var violations []Violation
-	prefix := name + "/"
-
-	if actual.Enforcement != gogithub.RulesetEnforcement(desired.Enforcement) {
-		violations = append(violations, Violation{
-			Field:    prefix + "enforcement",
-			Expected: desired.Enforcement,
-			Actual:   string(actual.Enforcement),
-		})
+// buildPatternRule converts a pattern rule config into go-github parameters.
+func buildPatternRule(cfg *PatternRuleConfig) *gogithub.PatternRuleParameters {
+	return &gogithub.PatternRuleParameters{
+		Name:     gogithub.Ptr(cfg.Name),
+		Negate:   gogithub.Ptr(cfg.Negate),
+		Operator: gogithub.PatternRuleOperator(cfg.Operator),
+		Pattern:  cfg.Pattern,
 	}
-
-	violations = append(violations, checkBypassActors(prefix, actual.BypassActors, desired.BypassActors)...)
-
-	if desired.Conditions != nil {
-		violations = append(violations, checkConditions(prefix, actual.Conditions, desired.Conditions)...)
-	}
-
-	violations = append(violations, checkRulesViolations(prefix, actual.Rules, desired.Rules)...)
-
-	return violations
-}
-
-func checkBypassActors(prefix string, actual []*gogithub.BypassActor, desired []BypassActorConfig) []Violation {
-	if len(desired) == 0 {
-		return nil
-	}
-
-	type actorKey struct {
-		actorID    int64
-		actorType  string
-		bypassMode string
-	}
-	actualSet := make(map[actorKey]bool, len(actual))
-	for _, a := range actual {
-		var at, bm string
-		if a.ActorType != nil {
-			at = string(*a.ActorType)
-		}
-		if a.BypassMode != nil {
-			bm = string(*a.BypassMode)
-		}
-		actualSet[actorKey{a.GetActorID(), at, bm}] = true
-	}
-
-	var violations []Violation
-	for _, d := range desired {
-		id := d.ActorID
-		if id == 0 && d.ActorType == "OrganizationAdmin" {
-			id = 1
-		}
-		key := actorKey{id, d.ActorType, d.BypassMode}
-		if !actualSet[key] {
-			violations = append(violations, Violation{
-				Field:    prefix + "bypass-actors",
-				Expected: fmt.Sprintf("%s (bypass: %s)", d.ActorType, d.BypassMode),
-				Actual:   "missing",
-				Message:  fmt.Sprintf("bypass actor %s with mode %s not found", d.ActorType, d.BypassMode),
-			})
-		}
-	}
-	return violations
-}
-
-func checkConditions(prefix string, actual *gogithub.RepositoryRulesetConditions, desired *ConditionsConfig) []Violation {
-	var violations []Violation
-
-	if desired.RefName != nil {
-		if actual == nil || actual.RefName == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "conditions/ref-name",
-				Expected: "configured",
-				Actual:   "not set",
-			})
-		} else {
-			if missing := missingStrings(desired.RefName.Include, actual.RefName.Include); len(missing) > 0 {
-				violations = append(violations, Violation{
-					Field:    prefix + "conditions/ref-name/include",
-					Expected: strings.Join(desired.RefName.Include, ", "),
-					Actual:   strings.Join(actual.RefName.Include, ", "),
-					Message:  fmt.Sprintf("missing ref includes: %s", strings.Join(missing, ", ")),
-				})
-			}
-		}
-	}
-
-	if desired.RepositoryName != nil {
-		if actual == nil || actual.RepositoryName == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "conditions/repository-name",
-				Expected: "configured",
-				Actual:   "not set",
-			})
-		} else {
-			if missing := missingStrings(desired.RepositoryName.Include, actual.RepositoryName.Include); len(missing) > 0 {
-				violations = append(violations, Violation{
-					Field:    prefix + "conditions/repository-name/include",
-					Expected: strings.Join(desired.RepositoryName.Include, ", "),
-					Actual:   strings.Join(actual.RepositoryName.Include, ", "),
-					Message:  fmt.Sprintf("missing repo includes: %s", strings.Join(missing, ", ")),
-				})
-			}
-		}
-	}
-
-	return violations
-}
-
-func checkRulesViolations(prefix string, actual *gogithub.RepositoryRulesetRules, desired RulesConfig) []Violation {
-	var violations []Violation
-
-	if actual == nil {
-		actual = &gogithub.RepositoryRulesetRules{}
-	}
-
-	checkToggle := func(field string, want *bool, present bool) {
-		if want == nil {
-			return
-		}
-		if *want && !present {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/" + field,
-				Expected: "enabled",
-				Actual:   "not present",
-			})
-		} else if !*want && present {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/" + field,
-				Expected: "disabled",
-				Actual:   "present",
-			})
-		}
-	}
-
-	checkToggle("creation", desired.Creation, actual.Creation != nil)
-	checkToggle("update", desired.Update, actual.Update != nil)
-	checkToggle("deletion", desired.Deletion, actual.Deletion != nil)
-	checkToggle("required-linear-history", desired.RequiredLinearHistory, actual.RequiredLinearHistory != nil)
-	checkToggle("required-signatures", desired.RequiredSignatures, actual.RequiredSignatures != nil)
-	checkToggle("non-fast-forward", desired.NonFastForward, actual.NonFastForward != nil)
-
-	if desired.PullRequest != nil {
-		if actual.PullRequest == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/pull-request",
-				Expected: "enabled",
-				Actual:   "not present",
-			})
-		} else {
-			violations = append(violations, checkPullRequestParams(prefix, actual.PullRequest, desired.PullRequest)...)
-		}
-	}
-
-	if desired.RequiredStatusChecks != nil {
-		if actual.RequiredStatusChecks == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/required-status-checks",
-				Expected: "enabled",
-				Actual:   "not present",
-			})
-		} else {
-			violations = append(violations, checkStatusChecksParams(prefix, actual.RequiredStatusChecks, desired.RequiredStatusChecks)...)
-		}
-	}
-
-	if desired.RequiredDeployments != nil {
-		if actual.RequiredDeployments == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/required-deployments",
-				Expected: "enabled",
-				Actual:   "not present",
-			})
-		} else {
-			violations = append(violations, checkDeploymentsParams(prefix, actual.RequiredDeployments, desired.RequiredDeployments)...)
-		}
-	}
-
-	if desired.CodeScanning != nil {
-		if actual.CodeScanning == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/code-scanning",
-				Expected: "enabled",
-				Actual:   "not present",
-			})
-		} else {
-			violations = append(violations, checkCodeScanningParams(prefix, actual.CodeScanning, desired.CodeScanning)...)
-		}
-	}
-
-	if desired.CopilotCodeReview != nil {
-		if actual.CopilotCodeReview == nil {
-			violations = append(violations, Violation{
-				Field:    prefix + "rules/copilot-code-review",
-				Expected: "enabled",
-				Actual:   "not present",
-			})
-		} else {
-			violations = append(violations, checkCopilotCodeReviewParams(prefix, actual.CopilotCodeReview, desired.CopilotCodeReview)...)
-		}
-	}
-
-	return violations
-}
-
-func checkPullRequestParams(prefix string, actual *gogithub.PullRequestRuleParameters, desired *PullRequestRuleConfig) []Violation {
-	var violations []Violation
-	p := prefix + "rules/pull-request/"
-
-	if actual.DismissStaleReviewsOnPush != desired.DismissStaleReviewsOnPush {
-		violations = append(violations, Violation{
-			Field:    p + "dismiss-stale-reviews-on-push",
-			Expected: fmt.Sprintf("%t", desired.DismissStaleReviewsOnPush),
-			Actual:   fmt.Sprintf("%t", actual.DismissStaleReviewsOnPush),
-		})
-	}
-	if actual.RequireCodeOwnerReview != desired.RequireCodeOwnerReview {
-		violations = append(violations, Violation{
-			Field:    p + "require-code-owner-review",
-			Expected: fmt.Sprintf("%t", desired.RequireCodeOwnerReview),
-			Actual:   fmt.Sprintf("%t", actual.RequireCodeOwnerReview),
-		})
-	}
-	if actual.RequireLastPushApproval != desired.RequireLastPushApproval {
-		violations = append(violations, Violation{
-			Field:    p + "require-last-push-approval",
-			Expected: fmt.Sprintf("%t", desired.RequireLastPushApproval),
-			Actual:   fmt.Sprintf("%t", actual.RequireLastPushApproval),
-		})
-	}
-	if actual.RequiredApprovingReviewCount != desired.RequiredApprovingReviewCount {
-		violations = append(violations, Violation{
-			Field:    p + "required-approving-review-count",
-			Expected: fmt.Sprintf("%d", desired.RequiredApprovingReviewCount),
-			Actual:   fmt.Sprintf("%d", actual.RequiredApprovingReviewCount),
-		})
-	}
-	if actual.RequiredReviewThreadResolution != desired.RequiredReviewThreadResolution {
-		violations = append(violations, Violation{
-			Field:    p + "required-review-thread-resolution",
-			Expected: fmt.Sprintf("%t", desired.RequiredReviewThreadResolution),
-			Actual:   fmt.Sprintf("%t", actual.RequiredReviewThreadResolution),
-		})
-	}
-	return violations
-}
-
-func checkStatusChecksParams(prefix string, actual *gogithub.RequiredStatusChecksRuleParameters, desired *RequiredStatusChecksRuleConfig) []Violation {
-	var violations []Violation
-	p := prefix + "rules/required-status-checks/"
-
-	if actual.StrictRequiredStatusChecksPolicy != desired.StrictRequiredStatusChecksPolicy {
-		violations = append(violations, Violation{
-			Field:    p + "strict-required-status-checks-policy",
-			Expected: fmt.Sprintf("%t", desired.StrictRequiredStatusChecksPolicy),
-			Actual:   fmt.Sprintf("%t", actual.StrictRequiredStatusChecksPolicy),
-		})
-	}
-
-	actualContexts := make(map[string]bool, len(actual.RequiredStatusChecks))
-	for _, sc := range actual.RequiredStatusChecks {
-		actualContexts[sc.Context] = true
-	}
-	var desiredContexts, missingContexts []string
-	for _, sc := range desired.RequiredStatusChecks {
-		desiredContexts = append(desiredContexts, sc.Context)
-		if !actualContexts[sc.Context] {
-			missingContexts = append(missingContexts, sc.Context)
-		}
-	}
-	if len(missingContexts) > 0 {
-		sort.Strings(missingContexts)
-		var actualList []string
-		for _, sc := range actual.RequiredStatusChecks {
-			actualList = append(actualList, sc.Context)
-		}
-		sort.Strings(actualList)
-		violations = append(violations, Violation{
-			Field:    p + "required-status-checks",
-			Expected: strings.Join(desiredContexts, ", "),
-			Actual:   strings.Join(actualList, ", "),
-			Message:  fmt.Sprintf("missing required checks: %s", strings.Join(missingContexts, ", ")),
-		})
-	}
-
-	return violations
-}
-
-func checkDeploymentsParams(prefix string, actual *gogithub.RequiredDeploymentsRuleParameters, desired *RequiredDeploymentsRuleConfig) []Violation {
-	missing := missingStrings(desired.RequiredDeploymentEnvironments, actual.RequiredDeploymentEnvironments)
-	if len(missing) > 0 {
-		return []Violation{{
-			Field:    prefix + "rules/required-deployments/environments",
-			Expected: strings.Join(desired.RequiredDeploymentEnvironments, ", "),
-			Actual:   strings.Join(actual.RequiredDeploymentEnvironments, ", "),
-			Message:  fmt.Sprintf("missing deployment environments: %s", strings.Join(missing, ", ")),
-		}}
-	}
-	return nil
-}
-
-func checkCodeScanningParams(prefix string, actual *gogithub.CodeScanningRuleParameters, desired *CodeScanningRuleConfig) []Violation {
-	actualTools := make(map[string]*gogithub.RuleCodeScanningTool, len(actual.CodeScanningTools))
-	for _, t := range actual.CodeScanningTools {
-		actualTools[t.Tool] = t
-	}
-
-	var violations []Violation
-	p := prefix + "rules/code-scanning/"
-
-	for _, dt := range desired.CodeScanningTools {
-		at, exists := actualTools[dt.Tool]
-		if !exists {
-			violations = append(violations, Violation{
-				Field:    p + "tools",
-				Expected: dt.Tool,
-				Actual:   "missing",
-				Message:  fmt.Sprintf("code scanning tool %q not found", dt.Tool),
-			})
-			continue
-		}
-		if string(at.AlertsThreshold) != dt.AlertsThreshold {
-			violations = append(violations, Violation{
-				Field:    p + dt.Tool + "/alerts-threshold",
-				Expected: dt.AlertsThreshold,
-				Actual:   string(at.AlertsThreshold),
-			})
-		}
-		if string(at.SecurityAlertsThreshold) != dt.SecurityAlertsThreshold {
-			violations = append(violations, Violation{
-				Field:    p + dt.Tool + "/security-alerts-threshold",
-				Expected: dt.SecurityAlertsThreshold,
-				Actual:   string(at.SecurityAlertsThreshold),
-			})
-		}
-	}
-
-	return violations
-}
-
-func checkCopilotCodeReviewParams(prefix string, actual *gogithub.CopilotCodeReviewRuleParameters, desired *CopilotCodeReviewRuleConfig) []Violation {
-	var violations []Violation
-	p := prefix + "rules/copilot-code-review/"
-
-	if actual.ReviewOnPush != desired.ReviewOnPush {
-		violations = append(violations, Violation{
-			Field:    p + "review-on-push",
-			Expected: fmt.Sprintf("%t", desired.ReviewOnPush),
-			Actual:   fmt.Sprintf("%t", actual.ReviewOnPush),
-		})
-	}
-	if actual.ReviewDraftPullRequests != desired.ReviewDraftPullRequests {
-		violations = append(violations, Violation{
-			Field:    p + "review-draft-pull-requests",
-			Expected: fmt.Sprintf("%t", desired.ReviewDraftPullRequests),
-			Actual:   fmt.Sprintf("%t", actual.ReviewDraftPullRequests),
-		})
-	}
-	return violations
-}
-
-// missingStrings returns required strings that are not present in actual.
-func missingStrings(required, actual []string) []string {
-	have := make(map[string]bool, len(actual))
-	for _, s := range actual {
-		have[s] = true
-	}
-	var missing []string
-	for _, s := range required {
-		if !have[s] {
-			missing = append(missing, s)
-		}
-	}
-	sort.Strings(missing)
-	return missing
 }

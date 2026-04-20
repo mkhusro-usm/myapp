@@ -9,7 +9,8 @@
 //   - registry.go: Registry for managing enabled rules
 //   - mode.go: Run modes (evaluate, apply)
 //   - codeowners.go: CODEOWNERS file enforcement
-//   - rulesets.go: GitHub Rulesets enforcement
+//   - rulesets.go: GitHub Rulesets config types and build/apply logic
+//   - rulesets_checker.go: Ruleset drift checker (violation detection)
 //   - repo_settings.go: Repository settings enforcement
 package rule
 
@@ -82,6 +83,7 @@ func ParseSettings[T any](raw map[string]any) (T, error) {
 
 const defaultBranchFallback = "main"
 
+// defaultBranch returns the repository's default branch, falling back to "main".
 func defaultBranch(repo *gh.Repository) string {
 	if repo.DefaultBranch != "" {
 		return repo.DefaultBranch

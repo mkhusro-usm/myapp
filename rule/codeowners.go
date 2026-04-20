@@ -51,6 +51,70 @@ func NewCodeowners(client *gh.Client, settings CodeownersSettings, overrides map
 	}
 }
 
+// Name returns the rule identifier.
+func (co *Codeowners) Name() string {
+	return "codeowners"
+}
+
+// Evaluate checks whether the repository's CODEOWNERS file contains all required entries.
+func (co *Codeowners) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {
+	log.Printf("[%s] evaluating repository CODEOWNERS", repo.FullName())
+
+	effective := co.effectiveSettings(repo.Name)
+
+	content, err := co.fetchContent(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var violations []Violation
+	if content != buildContent(effective) {
+		violations = co.check(content, effective)
+	}
+
+	return NewResult(co.Name(), repo.FullName(), violations), nil
+}
+
+// Apply creates a pull request that adds or updates the CODEOWNERS file
+// so that all required entries are present.
+func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
+	log.Printf("[%s] applying repository CODEOWNERS", repo.FullName())
+
+	effective := co.effectiveSettings(repo.Name)
+
+	content, err := co.fetchContent(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+
+	desiredContent := buildContent(effective)
+
+	// Already compliant — nothing to do.
+	if content == desiredContent {
+		return NewResult(co.Name(), repo.FullName(), nil), nil
+	}
+
+	prURL, err := co.client.CreateFileChangePR(
+		ctx, repo.Name, defaultBranch(repo),
+		codeownersBranchPrefix,
+		"chore: update CODEOWNERS per governance policy",
+		"This PR was automatically created by the governance tool to ensure CODEOWNERS compliance.",
+		[]gh.FileChange{{
+			Path:    codeownersPath,
+			Content: []byte(desiredContent),
+		}},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	r := NewResult(co.Name(), repo.FullName(), nil)
+	r.Applied = true
+	r.PullRequestURL = prURL
+
+	return r, nil
+}
+
 // parseCodeownersOverrides extracts and validates codeowners-specific overrides
 // from the raw override map. Only entries with new patterns (not in the baseline)
 // are accepted; conflicts are logged and skipped.
@@ -95,64 +159,6 @@ func parseCodeownersOverrides(baseline CodeownersSettings, raw map[string]config
 	return result
 }
 
-func (co *Codeowners) Name() string {
-	return "codeowners"
-}
-
-// Evaluate checks whether the repository's CODEOWNERS file contains all required entries.
-func (co *Codeowners) Evaluate(ctx context.Context, repo *gh.Repository) (*Result, error) {
-	log.Printf("[%s] evaluating repository CODEOWNERS", repo.FullName())
-
-	effective := co.effectiveSettings(repo.Name)
-
-	content, err := co.fetchContent(ctx, repo)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewResult(co.Name(), repo.FullName(), co.check(content, effective)), nil
-}
-
-// Apply creates a pull request that adds or updates the CODEOWNERS file
-// so that all required entries are present.
-func (co *Codeowners) Apply(ctx context.Context, repo *gh.Repository) (*Result, error) {
-	log.Printf("[%s] applying repository CODEOWNERS", repo.FullName())
-
-	effective := co.effectiveSettings(repo.Name)
-
-	content, err := co.fetchContent(ctx, repo)
-	if err != nil {
-		return nil, err
-	}
-
-	desiredContent := buildContent(effective)
-
-	// Already compliant — nothing to do.
-	if content == desiredContent {
-		return NewResult(co.Name(), repo.FullName(), nil), nil
-	}
-
-	prURL, err := co.client.CreateFileChangePR(
-		ctx, repo.Name, defaultBranch(repo),
-		codeownersBranchPrefix,
-		"chore: update CODEOWNERS per governance policy",
-		"This PR was automatically created by the governance tool to ensure CODEOWNERS compliance.",
-		[]gh.FileChange{{
-			Path:    codeownersPath,
-			Content: []byte(desiredContent),
-		}},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	r := NewResult(co.Name(), repo.FullName(), nil)
-	r.Applied = true
-	r.PullRequestURL = prURL
-
-	return r, nil
-}
-
 // effectiveSettings returns the merged settings for a given repo: baseline + any overrides.
 func (co *Codeowners) effectiveSettings(repoName string) CodeownersSettings {
 	override, hasOverride := co.overrides[repoName]
@@ -193,9 +199,43 @@ func (co *Codeowners) check(content string, effective CodeownersSettings) []Viol
 		}}
 	}
 
-	var violations []Violation
+	existing := make(map[string]struct{})
+	for line := range strings.SplitSeq(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		existing[trimmed] = struct{}{}
+	}
+
+	desired := make(map[string]struct{}, len(effective.Entries))
 	for _, entry := range effective.Entries {
-		violations = append(violations, checkEntry(content, entry)...)
+		desired[entry.line()] = struct{}{}
+	}
+
+	var violations []Violation
+
+	for _, entry := range effective.Entries {
+		expected := entry.line()
+		if _, found := existing[expected]; !found {
+			violations = append(violations, Violation{
+				Field:    "codeowners-entry",
+				Expected: expected,
+				Actual:   "missing or mismatched",
+				Message:  fmt.Sprintf("required entry %q not found or does not match exactly", entry.Pattern),
+			})
+		}
+	}
+
+	for line := range existing {
+		if _, expected := desired[line]; !expected {
+			violations = append(violations, Violation{
+				Field:    "codeowners-entry",
+				Expected: "absent",
+				Actual:   line,
+				Message:  fmt.Sprintf("unexpected entry %q not defined in governance config", line),
+			})
+		}
 	}
 
 	return violations
@@ -213,22 +253,4 @@ func buildContent(settings CodeownersSettings) string {
 	}
 
 	return strings.Join(lines, "\n") + "\n"
-}
-
-// checkEntry checks whether the exact CODEOWNERS line exists in the file.
-// The config is the source of truth — the line must match exactly.
-func checkEntry(content string, entry CodeownersEntry) []Violation {
-	expected := entry.line()
-	for line := range strings.SplitSeq(content, "\n") {
-		if strings.TrimSpace(line) == expected {
-			return nil
-		}
-	}
-
-	return []Violation{{
-		Field:    "codeowners-entry",
-		Expected: expected,
-		Actual:   "missing or mismatched",
-		Message:  fmt.Sprintf("required entry %q not found or does not match exactly", entry.Pattern),
-	}}
 }

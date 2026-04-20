@@ -13,10 +13,7 @@ const (
 )
 
 // ParseMode converts a string to a validated Mode.
-func ParseMode(s string) (
-	Mode,
-	error,
-) {
+func ParseMode(s string) (Mode, error) {
 	switch Mode(s) {
 	case ModeEvaluate, ModeApply:
 		return Mode(s), nil

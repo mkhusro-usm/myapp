@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	gogithub "github.com/google/go-github/v84/github"
 )
@@ -17,71 +16,59 @@ type FileChange struct {
 	SHA     string // Object SHA for updates (optional, filled internally)
 }
 
-// CreateFileChangePR creates a branch, commits multiple file changes, and opens a pull request.
-// It uses a constant branch name (branchPrefix) — if the branch/PR already exists, it reuses them.
-// Returns the PR's HTML URL. This is the standard workflow for governance rules that apply via PR.
-func (c *Client) CreateFileChangePR(ctx context.Context, repoName, baseBranch, branchPrefix, prTitle, prBody string, changes []FileChange) (string, error) {
-	// Get or create the branch.
-	if _, err := c.getOrCreateBranch(ctx, repoName, branchPrefix, baseBranch); err != nil {
+// CreateFileChangePR creates a branch, commits file changes, and opens a pull request.
+// The commit is always parented on the current base branch SHA, and the branch is
+// force-pushed to the new commit. This ensures deterministic, idempotent runs.
+func (c *Client) CreateFileChangePR(ctx context.Context, repoName, baseBranch, branchName, prTitle, prBody string, changes []FileChange) (string, error) {
+	// 1) Ensure branch exists and get base SHA.
+	baseSHA, err := c.ensureBranch(ctx, repoName, branchName, baseBranch)
+	if err != nil {
 		return "", fmt.Errorf("preparing branch: %w", err)
 	}
 
-	// Phase 1: Get SHAs for all files.
-	for i := range changes {
-		sha, err := c.getFileSHA(ctx, repoName, branchPrefix, changes[i].Path)
-		if err != nil {
-			return "", fmt.Errorf("getting existing file SHA for %s: %w", changes[i].Path, err)
-		}
-		changes[i].SHA = sha
-	}
-
-	// Phase 2: Commit all files.
-	for _, change := range changes {
-		msg := fmt.Sprintf("Update %s", change.Path)
-		if err := c.commitFile(ctx, repoName, branchPrefix, change.Path, msg, change.Content, change.SHA); err != nil {
-			return "", fmt.Errorf("committing file %s: %w", change.Path, err)
-		}
-	}
-
-	// Get or create the pull request.
-	pr, err := c.getOrCreatePullRequest(ctx, repoName, branchPrefix, baseBranch, prTitle, prBody)
+	// 2) Create a single commit with all file changes, parented on the base.
+	newCommitSHA, err := c.createCommitForChanges(ctx, repoName, baseSHA, prTitle, changes)
 	if err != nil {
-		return "", fmt.Errorf("preparing pull request: %w", err)
+		return "", fmt.Errorf("creating commit: %w", err)
+	}
+
+	// 3) Force-push branch to the new commit.
+	if err := c.forceUpdateRef(ctx, repoName, branchName, newCommitSHA); err != nil {
+		return "", fmt.Errorf("updating branch ref: %w", err)
+	}
+
+	// 4) Get or create PR.
+	pr, err := c.getOrCreatePullRequest(ctx, repoName, branchName, baseBranch, prTitle, prBody)
+	if err != nil {
+		return "", fmt.Errorf("preparing PR: %w", err)
 	}
 
 	return pr.GetHTMLURL(), nil
 }
 
-// getOrCreateBranch returns the SHA of an existing branch, or creates a new branch from baseBranch.
-// If the branch already exists, it returns the existing branch's SHA.
-// If creation fails with "already exists", it fetches and returns the existing SHA.
-func (c *Client) getOrCreateBranch(ctx context.Context, repoName, branchPrefix, baseBranch string) (string, error) {
-	// Get SHA of base branch to create from.
+// ensureBranch ensures the target branch exists (creating it if needed) and returns
+// the base branch SHA. Always returns the base SHA so callers can reset and commit
+// on top of the current base, regardless of the target branch's prior state.
+func (c *Client) ensureBranch(ctx context.Context, repoName, branchName, baseBranch string) (string, error) {
 	baseRef, _, err := c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+baseBranch)
 	if err != nil {
 		return "", fmt.Errorf("getting base branch %s: %w", baseBranch, err)
 	}
 	baseSHA := baseRef.GetObject().GetSHA()
 
-	// Try to create the branch.
 	_, _, err = c.restClient.Git.CreateRef(ctx, c.org, repoName, gogithub.CreateRef{
-		Ref: refsHeadsPrefix + branchPrefix,
+		Ref: refsHeadsPrefix + branchName,
 		SHA: baseSHA,
 	})
-	if err == nil {
-		return baseSHA, nil
-	}
-
-	// If error is "Reference already exists" (409 Conflict), fetch and return existing SHA.
-	if resp, ok := err.(*gogithub.ErrorResponse); ok && resp.Response.StatusCode == http.StatusConflict {
-		ref, _, err := c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+branchPrefix)
+	if err != nil {
+		// Branch may already exist — verify it's reachable.
+		_, _, err = c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+branchName)
 		if err != nil {
-			return "", fmt.Errorf("getting existing branch %s: %w", branchPrefix, err)
+			return "", fmt.Errorf("ensuring branch %s exists: %w", branchName, err)
 		}
-		return ref.GetObject().GetSHA(), nil
 	}
 
-	return "", fmt.Errorf("creating branch %s: %w", branchPrefix, err)
+	return baseSHA, nil
 }
 
 // getOrCreatePullRequest returns an existing open PR, or creates a new one.
@@ -125,41 +112,62 @@ func (c *Client) getOrCreatePullRequest(ctx context.Context, repoName, head, bas
 	return pr, nil
 }
 
-// getFileSHA returns the blob SHA of a file on the given branch.
-// Returns an empty string (without error) if the file does not exist.
-func (c *Client) getFileSHA(ctx context.Context, repoName, branch, path string) (string, error) {
-	opts := &gogithub.RepositoryContentGetOptions{Ref: branch}
-	file, _, resp, err := c.restClient.Repositories.GetContents(ctx, c.org, repoName, path, opts)
+// createCommitForChanges creates a single commit with all file changes.
+// It builds: blobs → tree → commit.
+func (c *Client) createCommitForChanges(ctx context.Context, repoName string, baseSHA string, commitMsg string, changes []FileChange) (string, error) {
+	// 1) Get base commit (to access its tree).
+	baseCommit, _, err := c.restClient.Git.GetCommit(ctx, c.org, repoName, baseSHA)
 	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			return "", nil
+		return "", fmt.Errorf("getting base commit: %w", err)
+	}
+
+	// 2) Create blobs for all files.
+	var entries []*gogithub.TreeEntry
+	for _, change := range changes {
+		blob, _, err := c.restClient.Git.CreateBlob(ctx, c.org, repoName, gogithub.Blob{
+			Content:  gogithub.Ptr(string(change.Content)),
+			Encoding: gogithub.Ptr("utf-8"),
+		})
+		if err != nil {
+			return "", fmt.Errorf("creating blob for %s: %w", change.Path, err)
 		}
-		return "", fmt.Errorf("getting file SHA for %s: %w", path, err)
+
+		entries = append(entries, &gogithub.TreeEntry{
+			Path: gogithub.Ptr(change.Path),
+			Mode: gogithub.Ptr("100644"),
+			Type: gogithub.Ptr("blob"),
+			SHA:  blob.SHA,
+		})
 	}
 
-	if file == nil {
-		return "", nil
+	// 3) Create new tree (based on base tree).
+	treeSHA := baseCommit.GetTree().GetSHA()
+	tree, _, err := c.restClient.Git.CreateTree(ctx, c.org, repoName, treeSHA, entries)
+	if err != nil {
+		return "", fmt.Errorf("creating tree: %w", err)
 	}
 
-	return file.GetSHA(), nil
+	// 4) Create commit.
+	commit, _, err := c.restClient.Git.CreateCommit(ctx, c.org, repoName, gogithub.Commit{
+		Message: gogithub.Ptr(commitMsg),
+		Tree:    tree,
+		Parents: []*gogithub.Commit{
+			{SHA: gogithub.Ptr(baseSHA)},
+		},
+	}, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating commit: %w", err)
+	}
+
+	return commit.GetSHA(), nil
 }
 
-// commitFile creates or updates a single file on the given branch.
-// If blobSHA is non-empty the file is treated as an update; otherwise as a create.
-func (c *Client) commitFile(ctx context.Context, repoName, branch, path, message string, content []byte, blobSHA string) error {
-	opts := &gogithub.RepositoryContentFileOptions{
-		Message: &message,
-		Content: content,
-		Branch:  &branch,
-	}
-	if blobSHA != "" {
-		opts.SHA = &blobSHA
-	}
-
-	_, _, err := c.restClient.Repositories.CreateFile(ctx, c.org, repoName, path, opts)
-	if err != nil {
-		return fmt.Errorf("committing file %s: %w", path, err)
-	}
-
-	return nil
+// forceUpdateRef force-updates the branch to point at the given SHA.
+func (c *Client) forceUpdateRef(ctx context.Context, repoName, branchName, sha string) error {
+	force := true
+	_, _, err := c.restClient.Git.UpdateRef(ctx, c.org, repoName, refsHeadsPrefix+branchName, gogithub.UpdateRef{
+		SHA:   sha,
+		Force: &force,
+	})
+	return err
 }

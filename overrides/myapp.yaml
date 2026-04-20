@@ -1,0 +1,7 @@
+rules:
+  codeowners:
+    settings:
+      entries:
+        - pattern: "config.yaml"
+          owners:
+            - "@mkhusro-usm"

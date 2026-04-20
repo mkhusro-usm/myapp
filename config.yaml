@@ -3,7 +3,7 @@ github-app:
   installation-id: 123964365
   # Private key is injected via GH_APP_PRIVATE_KEY env var (from GitHub Actions secrets).
   # Optionally set private-key-path for local dev with a gitignored .pem file.
-  # private-key-path: ./private-key.pem
+  private-key-path: ./private-key.pem
 
 org: mkhusro-usm
 
@@ -15,63 +15,62 @@ rules:
     scope: repo
     settings:
       rulesets:
-        - name: "default-branch-protection"
+        - name: "{default_branch}"
           target: branch
           enforcement: active
+          bypass-actors:
+            - actor-id: 5
+              actor-type: "RepositoryRole"
+              bypass-mode: "always"
           conditions:
             ref-name:
               include:
                 - "~DEFAULT_BRANCH"
               exclude: []
           rules:
-            # Restrict rules
             creation: true
-            update: true
+            update: false
             deletion: true
+            require-linear-history: false
+            # require-deployments-to-succeed: (omitted = not managed)
+            require-signed-commits: false
 
-            # Pull request reviews
             pull-request:
-              dismiss-stale-reviews-on-push: true
+              dismiss-stale-approvals-on-push: false
               require-code-owner-review: true
-              require-last-push-approval: true
-              required-approving-review-count: 1
-              required-review-thread-resolution: true
+              require-most-recent-push-approval: false
+              required-approvals: 1
+              require-conversation-resolution: true
+              required-reviewers: []
+              allowed-merge-methods:
+                - "squash"
 
-            # Status checks
             required-status-checks:
-              strict-required-status-checks-policy: true
-              required-status-checks:
-                - context: "ci/build"
-                - context: "ci/test"
+              require-branches-to-be-up-to-date: false
+              do-not-require-status-checks-on-creation: false
+              required-status-checks: []
 
-            # Deployments (uncomment when environments are configured)
-            # required-deployments:
-            #   required-deployment-environments:
-            #     - "production"
+            block-force-pushes: true
 
-            # Code scanning
             code-scanning:
               code-scanning-tools:
                 - tool: "CodeQL"
                   alerts-threshold: "errors"
-                  security-alerts-threshold: "critical"
+                  security-alerts-threshold: "high_or_higher"
 
-            # Copilot code review
             copilot-code-review:
-              review-on-push: true
+              review-on-push: false
               review-draft-pull-requests: false
-
-            # Branch rules
-            required-linear-history: true
-            required-signatures: true
-            non-fast-forward: true
 
   codeowners:
     enabled: false
     scope: repo
     settings:
       entries:
-        - pattern: "*"
+        - pattern: ".github/CODEOWNERS"
+          owners:
+            - "@mkhusro-usm"
+        - pattern: ".github/workflows/**"
           owners:
             - "@mkhusro-usm"
 
@@ -82,15 +81,19 @@ rules:
       # Merge strategies
       allow-merge-commit: true
       allow-squash-merge: true
-      allow-rebase-merge: true
+      allow-rebase-merge: false
 
-      # Default commit messages
-      merge-commit-title: PR_TITLE            # PR_TITLE or MERGE_MESSAGE
-      merge-commit-message: PR_BODY           # PR_BODY, PR_TITLE, or BLANK
-      squash-merge-commit-title: PR_TITLE     # PR_TITLE or COMMIT_OR_PR_TITLE
-      squash-merge-commit-message: PR_BODY    # PR_BODY, COMMIT_MESSAGES, or BLANK
+      # Merge commit — valid combos:
+      #   PR_TITLE + PR_BODY | PR_TITLE + BLANK | MERGE_MESSAGE + PR_TITLE
+      merge-commit-title: MERGE_MESSAGE
+      merge-commit-message: PR_TITLE
+
+      # Squash merge commit — valid combos:
+      #   PR_TITLE + PR_BODY | PR_TITLE + BLANK | PR_TITLE + COMMIT_MESSAGES | COMMIT_OR_PR_TITLE + COMMIT_MESSAGES
+      squash-merge-commit-title: PR_TITLE
+      squash-merge-commit-message: COMMIT_MESSAGES
 
       # PR behavior
-      allow-update-branch: true
+      allow-update-branch: false
       allow-auto-merge: true
       delete-branch-on-merge: true

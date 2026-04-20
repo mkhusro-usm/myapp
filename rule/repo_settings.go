@@ -34,6 +34,7 @@ func NewRepoSettings(client *gh.Client, settings RepoSettingsConfig) *RepoSettin
 	return &RepoSettings{client: client, settings: settings}
 }
 
+// Name returns the rule identifier.
 func (rs *RepoSettings) Name() string {
 	return "repo-settings"
 }
@@ -64,25 +65,22 @@ func (rs *RepoSettings) Apply(ctx context.Context, repo *gh.Repository) (*Result
 	return r, nil
 }
 
-func (rs *RepoSettings) desired() *gh.RepoSettings {
-	return &gh.RepoSettings{
-		AllowMergeCommit:         rs.settings.AllowMergeCommit,
-		AllowSquashMerge:         rs.settings.AllowSquashMerge,
-		AllowRebaseMerge:         rs.settings.AllowRebaseMerge,
-		AllowAutoMerge:           rs.settings.AllowAutoMerge,
-		DeleteBranchOnMerge:      rs.settings.DeleteBranchOnMerge,
-		AllowUpdateBranch:        rs.settings.AllowUpdateBranch,
-		SquashMergeCommitTitle:   rs.settings.SquashMergeCommitTitle,
-		SquashMergeCommitMessage: rs.settings.SquashMergeCommitMessage,
-		MergeCommitTitle:         rs.settings.MergeCommitTitle,
-		MergeCommitMessage:       rs.settings.MergeCommitMessage,
-	}
-}
-
+// check compares current repo settings against the config.
+// Managed settings with mismatched values produce drift violations.
+// Unmanaged settings (nil in config) produce unmanaged violations.
 func (rs *RepoSettings) check(current *gh.RepoSettings) []Violation {
 	var violations []Violation
 
 	checkBool := func(field string, expected, actual *bool) {
+		if expected == nil && actual != nil {
+			violations = append(violations, Violation{
+				Field:    field,
+				Expected: "managed",
+				Actual:   fmt.Sprintf("unmanaged (current: %t)", *actual),
+				Message:  fmt.Sprintf("setting %q is not governed by config", field),
+			})
+			return
+		}
 		if expected != nil && actual != nil && *expected != *actual {
 			violations = append(violations, Violation{
 				Field:    field,
@@ -93,6 +91,15 @@ func (rs *RepoSettings) check(current *gh.RepoSettings) []Violation {
 	}
 
 	checkString := func(field string, expected, actual *string) {
+		if expected == nil && actual != nil {
+			violations = append(violations, Violation{
+				Field:    field,
+				Expected: "managed",
+				Actual:   fmt.Sprintf("unmanaged (current: %s)", *actual),
+				Message:  fmt.Sprintf("setting %q is not governed by config", field),
+			})
+			return
+		}
 		if expected != nil && actual != nil && *expected != *actual {
 			violations = append(violations, Violation{
 				Field:    field,
@@ -115,4 +122,21 @@ func (rs *RepoSettings) check(current *gh.RepoSettings) []Violation {
 	checkString("merge-commit-message", rs.settings.MergeCommitMessage, current.MergeCommitMessage)
 
 	return violations
+}
+
+// desired returns the configured settings for the GitHub API update call.
+// Nil fields are omitted, leaving those settings unchanged on the repo.
+func (rs *RepoSettings) desired() *gh.RepoSettings {
+	return &gh.RepoSettings{
+		AllowMergeCommit:         rs.settings.AllowMergeCommit,
+		AllowSquashMerge:         rs.settings.AllowSquashMerge,
+		AllowRebaseMerge:         rs.settings.AllowRebaseMerge,
+		AllowAutoMerge:           rs.settings.AllowAutoMerge,
+		DeleteBranchOnMerge:      rs.settings.DeleteBranchOnMerge,
+		AllowUpdateBranch:        rs.settings.AllowUpdateBranch,
+		SquashMergeCommitTitle:   rs.settings.SquashMergeCommitTitle,
+		SquashMergeCommitMessage: rs.settings.SquashMergeCommitMessage,
+		MergeCommitTitle:         rs.settings.MergeCommitTitle,
+		MergeCommitMessage:       rs.settings.MergeCommitMessage,
+	}
 }
