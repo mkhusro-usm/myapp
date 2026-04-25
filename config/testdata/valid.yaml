@@ -1,0 +1,26 @@
+github-app:
+  app-id: 12345
+  installation-id: 67890
+  private-key-path: ./key.pem
+
+org: test-org
+
+concurrency: 5
+
+rules:
+  repo-rulesets:
+    enabled: true
+    scope: repo
+    settings:
+      rulesets:
+        - name: "main"
+          target: branch
+          enforcement: active
+  codeowners:
+    enabled: false
+    scope: repo
+    settings:
+      entries:
+        - pattern: ".github/CODEOWNERS"
+          owners:
+            - "@test-org"

@@ -35,7 +35,7 @@ type CodeownersSettings struct {
 // containing the required entries defined in the governance config.
 // Per-repo overrides allow additional entries to be appended to the baseline.
 type Codeowners struct {
-	client    *gh.Client
+	client    CodeownersClient
 	settings  CodeownersSettings
 	overrides map[string]CodeownersSettings // repo name → additional entries
 }
@@ -43,7 +43,7 @@ type Codeowners struct {
 // NewCodeowners creates a Codeowners rule with the given baseline settings.
 // It extracts and parses any per-repo overrides for this rule from the raw
 // overrides map. Override entries that fail to parse are logged and skipped.
-func NewCodeowners(client *gh.Client, settings CodeownersSettings, overrides map[string]config.RepoOverride) *Codeowners {
+func NewCodeowners(client CodeownersClient, settings CodeownersSettings, overrides map[string]config.RepoOverride) *Codeowners {
 	return &Codeowners{
 		client:    client,
 		settings:  settings,

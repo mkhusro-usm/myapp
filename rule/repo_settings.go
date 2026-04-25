@@ -25,12 +25,12 @@ type RepoSettingsConfig struct {
 
 // RepoSettings enforces repository-level PR and merge settings.
 type RepoSettings struct {
-	client   *gh.Client
+	client   RepoSettingsClient
 	settings RepoSettingsConfig
 }
 
 // NewRepoSettings creates a RepoSettings rule with the given settings.
-func NewRepoSettings(client *gh.Client, settings RepoSettingsConfig) *RepoSettings {
+func NewRepoSettings(client RepoSettingsClient, settings RepoSettingsConfig) *RepoSettings {
 	return &RepoSettings{client: client, settings: settings}
 }
 

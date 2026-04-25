@@ -17,6 +17,7 @@ type Repository struct {
 	IsFork        bool
 }
 
+// FullName returns the owner/name string for the repository.
 func (r Repository) FullName() string {
 	return r.Owner + "/" + r.Name
 }

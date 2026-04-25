@@ -20,24 +20,20 @@ type FileChange struct {
 // The commit is always parented on the current base branch SHA, and the branch is
 // force-pushed to the new commit. This ensures deterministic, idempotent runs.
 func (c *Client) CreateFileChangePR(ctx context.Context, repoName, baseBranch, branchName, prTitle, prBody string, changes []FileChange) (string, error) {
-	// 1) Ensure branch exists and get base SHA.
 	baseSHA, err := c.ensureBranch(ctx, repoName, branchName, baseBranch)
 	if err != nil {
 		return "", fmt.Errorf("preparing branch: %w", err)
 	}
 
-	// 2) Create a single commit with all file changes, parented on the base.
 	newCommitSHA, err := c.createCommitForChanges(ctx, repoName, baseSHA, prTitle, changes)
 	if err != nil {
 		return "", fmt.Errorf("creating commit: %w", err)
 	}
 
-	// 3) Force-push branch to the new commit.
 	if err := c.forceUpdateRef(ctx, repoName, branchName, newCommitSHA); err != nil {
 		return "", fmt.Errorf("updating branch ref: %w", err)
 	}
 
-	// 4) Get or create PR.
 	pr, err := c.getOrCreatePullRequest(ctx, repoName, branchName, baseBranch, prTitle, prBody)
 	if err != nil {
 		return "", fmt.Errorf("preparing PR: %w", err)
@@ -50,23 +46,25 @@ func (c *Client) CreateFileChangePR(ctx context.Context, repoName, baseBranch, b
 // the base branch SHA. Always returns the base SHA so callers can reset and commit
 // on top of the current base, regardless of the target branch's prior state.
 func (c *Client) ensureBranch(ctx context.Context, repoName, branchName, baseBranch string) (string, error) {
-	baseRef, _, err := c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+baseBranch)
+	baseRef, resp, err := c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+baseBranch)
 	if err != nil {
 		return "", fmt.Errorf("getting base branch %s: %w", baseBranch, err)
 	}
+	logRateLimit(resp)
 	baseSHA := baseRef.GetObject().GetSHA()
 
-	_, _, err = c.restClient.Git.CreateRef(ctx, c.org, repoName, gogithub.CreateRef{
+	_, resp, err = c.restClient.Git.CreateRef(ctx, c.org, repoName, gogithub.CreateRef{
 		Ref: refsHeadsPrefix + branchName,
 		SHA: baseSHA,
 	})
 	if err != nil {
 		// Branch may already exist — verify it's reachable.
-		_, _, err = c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+branchName)
+		_, resp, err = c.restClient.Git.GetRef(ctx, c.org, repoName, refsHeadsPrefix+branchName)
 		if err != nil {
 			return "", fmt.Errorf("ensuring branch %s exists: %w", branchName, err)
 		}
 	}
+	logRateLimit(resp)
 
 	return baseSHA, nil
 }
@@ -74,7 +72,6 @@ func (c *Client) ensureBranch(ctx context.Context, repoName, branchName, baseBra
 // getOrCreatePullRequest returns an existing open PR, or creates a new one.
 // It searches for an open PR with the given head and base branches.
 func (c *Client) getOrCreatePullRequest(ctx context.Context, repoName, head, base, title, body string) (*gogithub.PullRequest, error) {
-	// Search for existing open PR.
 	page := 1
 	for {
 		prs, resp, err := c.restClient.PullRequests.List(ctx, c.org, repoName, &gogithub.PullRequestListOptions{
@@ -88,6 +85,8 @@ func (c *Client) getOrCreatePullRequest(ctx context.Context, repoName, head, bas
 		if err != nil {
 			return nil, fmt.Errorf("listing pull requests: %w", err)
 		}
+		logRateLimit(resp)
+
 		for _, pr := range prs {
 			if pr.GetHead().GetRef() == head && pr.GetBase().GetRef() == base {
 				return pr, nil
@@ -99,8 +98,7 @@ func (c *Client) getOrCreatePullRequest(ctx context.Context, repoName, head, bas
 		page = resp.NextPage
 	}
 
-	// No existing PR found — create one.
-	pr, _, err := c.restClient.PullRequests.Create(ctx, c.org, repoName, &gogithub.NewPullRequest{
+	pr, resp, err := c.restClient.PullRequests.Create(ctx, c.org, repoName, &gogithub.NewPullRequest{
 		Title: &title,
 		Body:  &body,
 		Head:  &head,
@@ -109,28 +107,29 @@ func (c *Client) getOrCreatePullRequest(ctx context.Context, repoName, head, bas
 	if err != nil {
 		return nil, fmt.Errorf("creating pull request: %w", err)
 	}
+	logRateLimit(resp)
 	return pr, nil
 }
 
 // createCommitForChanges creates a single commit with all file changes.
 // It builds: blobs → tree → commit.
 func (c *Client) createCommitForChanges(ctx context.Context, repoName string, baseSHA string, commitMsg string, changes []FileChange) (string, error) {
-	// 1) Get base commit (to access its tree).
-	baseCommit, _, err := c.restClient.Git.GetCommit(ctx, c.org, repoName, baseSHA)
+	baseCommit, resp, err := c.restClient.Git.GetCommit(ctx, c.org, repoName, baseSHA)
 	if err != nil {
 		return "", fmt.Errorf("getting base commit: %w", err)
 	}
+	logRateLimit(resp)
 
-	// 2) Create blobs for all files.
 	var entries []*gogithub.TreeEntry
 	for _, change := range changes {
-		blob, _, err := c.restClient.Git.CreateBlob(ctx, c.org, repoName, gogithub.Blob{
+		blob, resp, err := c.restClient.Git.CreateBlob(ctx, c.org, repoName, gogithub.Blob{
 			Content:  gogithub.Ptr(string(change.Content)),
 			Encoding: gogithub.Ptr("utf-8"),
 		})
 		if err != nil {
 			return "", fmt.Errorf("creating blob for %s: %w", change.Path, err)
 		}
+		logRateLimit(resp)
 
 		entries = append(entries, &gogithub.TreeEntry{
 			Path: gogithub.Ptr(change.Path),
@@ -140,15 +139,14 @@ func (c *Client) createCommitForChanges(ctx context.Context, repoName string, ba
 		})
 	}
 
-	// 3) Create new tree (based on base tree).
 	treeSHA := baseCommit.GetTree().GetSHA()
-	tree, _, err := c.restClient.Git.CreateTree(ctx, c.org, repoName, treeSHA, entries)
+	tree, resp, err := c.restClient.Git.CreateTree(ctx, c.org, repoName, treeSHA, entries)
 	if err != nil {
 		return "", fmt.Errorf("creating tree: %w", err)
 	}
+	logRateLimit(resp)
 
-	// 4) Create commit.
-	commit, _, err := c.restClient.Git.CreateCommit(ctx, c.org, repoName, gogithub.Commit{
+	commit, resp, err := c.restClient.Git.CreateCommit(ctx, c.org, repoName, gogithub.Commit{
 		Message: gogithub.Ptr(commitMsg),
 		Tree:    tree,
 		Parents: []*gogithub.Commit{
@@ -158,6 +156,7 @@ func (c *Client) createCommitForChanges(ctx context.Context, repoName string, ba
 	if err != nil {
 		return "", fmt.Errorf("creating commit: %w", err)
 	}
+	logRateLimit(resp)
 
 	return commit.GetSHA(), nil
 }
@@ -165,9 +164,10 @@ func (c *Client) createCommitForChanges(ctx context.Context, repoName string, ba
 // forceUpdateRef force-updates the branch to point at the given SHA.
 func (c *Client) forceUpdateRef(ctx context.Context, repoName, branchName, sha string) error {
 	force := true
-	_, _, err := c.restClient.Git.UpdateRef(ctx, c.org, repoName, refsHeadsPrefix+branchName, gogithub.UpdateRef{
+	_, resp, err := c.restClient.Git.UpdateRef(ctx, c.org, repoName, refsHeadsPrefix+branchName, gogithub.UpdateRef{
 		SHA:   sha,
 		Force: &force,
 	})
+	logRateLimit(resp)
 	return err
 }

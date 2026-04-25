@@ -133,13 +133,13 @@ type CopilotCodeReviewRuleConfig struct {
 
 // MergeQueueRuleConfig maps to the merge_queue rule parameters.
 type MergeQueueRuleConfig struct {
-	CheckResponseTimeoutMinutes int    `yaml:"check-response-timeout-minutes"`
-	GroupingStrategy            string `yaml:"grouping-strategy"`
-	MaxEntriesToBuild           int    `yaml:"max-entries-to-build"`
-	MaxEntriesToMerge           int    `yaml:"max-entries-to-merge"`
-	MergeMethod                 string `yaml:"merge-method"`
-	MinEntriesToMerge           int    `yaml:"min-entries-to-merge"`
-	MinEntriesToMergeWaitMinutes int   `yaml:"min-entries-to-merge-wait-minutes"`
+	CheckResponseTimeoutMinutes  int    `yaml:"check-response-timeout-minutes"`
+	GroupingStrategy             string `yaml:"grouping-strategy"`
+	MaxEntriesToBuild            int    `yaml:"max-entries-to-build"`
+	MaxEntriesToMerge            int    `yaml:"max-entries-to-merge"`
+	MergeMethod                  string `yaml:"merge-method"`
+	MinEntriesToMerge            int    `yaml:"min-entries-to-merge"`
+	MinEntriesToMergeWaitMinutes int    `yaml:"min-entries-to-merge-wait-minutes"`
 }
 
 // PatternRuleConfig maps to pattern-based rule parameters (commit message, branch name).
@@ -152,12 +152,12 @@ type PatternRuleConfig struct {
 
 // RepoRulesets enforces rulesets at the repository level.
 type RepoRulesets struct {
-	client   *gh.Client
+	client   RulesetsClient
 	settings RulesetsSettings
 }
 
 // NewRepoRulesets creates a RepoRulesets rule with the given settings.
-func NewRepoRulesets(client *gh.Client, settings RulesetsSettings) *RepoRulesets {
+func NewRepoRulesets(client RulesetsClient, settings RulesetsSettings) *RepoRulesets {
 	return &RepoRulesets{client: client, settings: settings}
 }
 

@@ -1,0 +1,10 @@
+rules:
+  codeowners:
+    settings:
+      entries:
+        - pattern: "config.yaml"
+          owners:
+            - "@platform-team"
+  repo-settings:
+    settings:
+      allow-rebase-merge: true

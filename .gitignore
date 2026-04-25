@@ -16,6 +16,7 @@ test-build
 
 # Code coverage profiles and other test artifacts
 *.out
+*.html
 coverage.*
 *.coverprofile
 profile.cov
